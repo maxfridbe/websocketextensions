@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net</Description>
+    <Authors>Max Fridberg</Authors>
+    <Company />
+    <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
+    <PackageTags>WebSocket System.Net</PackageTags>
+  </PropertyGroup>
+
+</Project>
