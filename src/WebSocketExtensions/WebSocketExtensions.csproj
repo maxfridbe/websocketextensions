@@ -9,7 +9,7 @@
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
     <PackageTags>WebSocket System.Net</PackageTags>
     <PackageProjectUrl>https://github.com/maxfridbe/websocketextensions</PackageProjectUrl>
-    <PackageIconUrl>https://github.com/maxfridbe/websocketextensions/blob/master/websocket.png</PackageIconUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/maxfridbe/websocketextensions/master/websocket.png</PackageIconUrl>
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>

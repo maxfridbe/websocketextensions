@@ -74,6 +74,9 @@ namespace WebSocketExtensions
             catch (Exception e)
             {
                 this._logError($"Exception: {e}");
+                if (webSocket.State == WebSocketState.Aborted || webSocket.State == WebSocketState.Closed)
+                    closeHandler(new WebSocketReceivedResultEventArgs(e));
+
             }
             finally
             {

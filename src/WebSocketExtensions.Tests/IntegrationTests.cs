@@ -58,16 +58,18 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-        public void TestCreateServer_start()
+        public async Task TestCreateServer_start()
         {
             //arrange
             var port = _FreeTcpPort();
-            var server = new WebSocketServer();
+            using (var server = new WebSocketServer())
+            {
 
-            //act
-            server.StartAsync($"http://localhost:{port}/");
-
-            //assert
+                //act
+                await server.StartAsync($"http://localhost:{port}/");
+                await Task.Delay(100);
+                //assert
+            }
 
         }
         public class testBeh : WebSocketServerBehavior
@@ -162,8 +164,76 @@ namespace WebSocketExtensions.Tests
 
         }
 
+
         [Fact]
-        public async Task TestCreateServerClient_connect_recv_echo()
+        public async Task TestServerDispose()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            var closed = false;
+            var client = new WebSocketClient() {
+                CloseHandler = (c) => 
+                closed = true
+            };
+            await client.ConnectAsync("ws" + u + "aaa");
+       
+            //act
+          
+            await Task.Delay(100);
+            server.Dispose();
+            await Task.Delay(100);
+            //asssert
+            Assert.True(closed);
+
+        }
+
+        [Fact]
+        public async Task TestClientDispose()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            var closed = false;
+            var client = new WebSocketClient()
+            {
+                CloseHandler = (c) =>
+                    closed = true
+            };
+            await client.ConnectAsync("ws" + u + "aaa");
+
+            //act
+
+            await Task.Delay(100);
+
+            client.Dispose();
+            await Task.Delay(100);
+
+            server.Dispose();
+            await Task.Delay(100);
+            //asssert
+            Assert.True(closed);
+
+        }
+
+        [Fact]
+        public async Task TestCreateServerClient_connect_recv_echo() 
         {
             //arrange
             var server = new WebSocketServer();
