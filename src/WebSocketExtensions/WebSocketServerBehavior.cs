@@ -12,13 +12,12 @@ namespace WebSocketExtensions
       
         public DateTime StartTime { get; } = DateTime.UtcNow;
 
-        //protected ValueTask<bool> SendAsync(Stream stream, int length, CancellationToken tok) { }
        
         public virtual string GetClientId(WebSocketContext ctx)
         {
             return Guid.NewGuid().ToString();
         }
-        public virtual bool OnValidateContext(WebSocketContext context) { return true; }
+        public virtual bool OnValidateContext(WebSocketContext context, ref int errStatusCode , ref string statusDescription) { return true; }
         public virtual void OnClose(WebSocketClosedEventArgs e) { }
         public virtual void OnError(ErrorEventArgs e) { }
         public virtual void OnStringMessage(StringMessageReceivedEventArgs e) { }

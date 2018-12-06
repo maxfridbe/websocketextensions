@@ -74,7 +74,7 @@ namespace WebSocketExtensions.Tests
         }
         public class testBeh : WebSocketServerBehavior
         {
-            public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_)=> { };
+            public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
             public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
 
             public override void OnStringMessage(StringMessageReceivedEventArgs e)
@@ -95,7 +95,7 @@ namespace WebSocketExtensions.Tests
             var port = _FreeTcpPort();
 
             server.AddRouteBehavior("/aaa", () => new testBeh());
-           await server.StartAsync($"http://localhost:{port}/");
+            await server.StartAsync($"http://localhost:{port}/");
 
             var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
@@ -180,14 +180,15 @@ namespace WebSocketExtensions.Tests
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
             var closed = false;
-            var client = new WebSocketClient() {
-                CloseHandler = (c) => 
+            var client = new WebSocketClient()
+            {
+                CloseHandler = (c) =>
                 closed = true
             };
             await client.ConnectAsync("ws" + u + "aaa");
-       
+
             //act
-          
+
             await Task.Delay(100);
             server.Dispose();
             await Task.Delay(100);
@@ -233,7 +234,7 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-        public async Task TestCreateServerClient_connect_recv_echo() 
+        public async Task TestCreateServerClient_connect_recv_echo()
         {
             //arrange
             var server = new WebSocketServer();
@@ -302,6 +303,62 @@ namespace WebSocketExtensions.Tests
 
             //assert
             Assert.Equal(new FileInfo(s).Length, recievedSize);
+
+        }
+
+
+        [Fact]
+        public async Task TestCreateServerClient_connect_2_boot_1()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) =>
+            {
+                e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None);
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+            await client.SendStringAsync("hi", CancellationToken.None);
+
+            WebSocketReceiveResult kickoffRes = null;
+            var client2 = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+                CloseHandler = (e) => 
+                kickoffRes = e.ReceivedResult
+            };
+            await client2.ConnectAsync($"ws://localhost:{port}/aaa");
+            await client2.SendStringAsync("hi", CancellationToken.None);
+
+            //act
+            await Task.Delay(100);
+            var clients = server.GetActiveClientIds();
+            Assert.Equal(2, clients.Count);
+
+            await server.DisconnectClientById(clients[1], "dontlikeu");
+            clients = server.GetActiveClientIds();
+            Assert.Equal(1, clients.Count);
+            while (kickoffRes == null)
+            {
+                await Task.Delay(100);
+               
+            }
+            Assert.Equal("dontlikeu", kickoffRes.CloseStatusDescription);
+            //assert
+            Assert.Equal("hihi", res);
 
         }
 

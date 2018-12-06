@@ -20,10 +20,12 @@ namespace WebSocketExtensions
         public Action<StringMessageReceivedEventArgs> MessageHandler { get; set; } = (e) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryHandler { get; set; } = (e) => { };
         public Action<WebSocketReceivedResultEventArgs> CloseHandler { get; set; } = (e) => { };
-
+        public Action<ClientWebSocketOptions> ConfigureOptionsBeforeConnect { get; set; } = (e) => { };
         public async Task ConnectAsync(string url, CancellationToken tok = default(CancellationToken))
         {
             _client = new ClientWebSocket();
+            ConfigureOptionsBeforeConnect(_client.Options);
+
             await _client.ConnectAsync(new Uri(url), tok);
 
             _tsk = new Task(async () =>

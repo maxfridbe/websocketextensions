@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace WebSocketExtensions
 {
     //## The Server class        
-    public class WebSocketServer : WebSocketReciever,IDisposable
+    public class WebSocketServer : WebSocketReciever, IDisposable
     {
         public WebSocketServer(Action<string, bool> logger = null) : base(logger)
         {
@@ -38,19 +38,29 @@ namespace WebSocketExtensions
                 //_listener.Close();
             }
 
-            if(_cts != null)
+            if (_cts != null)
             {
                 _cts.Cancel();
             }
-            foreach(var c in _clients)
+            foreach (var c in _clients)
             {
                 c.Value.WebSocket.Dispose();
             }
 
         }
-        public IList<string> GetActiveClients()
+        public IList<string> GetActiveClientIds()
         {
             return _clients.Where(c => c.Value.WebSocket.State == WebSocketState.Open).Select(c => c.Key).ToList();
+        }
+        public bool IsListening()
+        {
+            return _listener.IsListening;
+        }
+        public Task DisconnectClientById(string clientId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
+        {
+            WebSocketContext ctx = null;
+            _clients.TryGetValue(clientId, out ctx);
+            return ctx.WebSocket.CloseAsync(status, description, CancellationToken.None);
         }
         public Task SendStreamAsync(string clientId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
@@ -117,7 +127,8 @@ namespace WebSocketExtensions
                             listenerContext.Response.Close();
                         }
                     }
-                }catch(Exception e)
+                }
+                catch (Exception e)
                 {
                     _logError(e.ToString());
                 }
@@ -143,9 +154,12 @@ namespace WebSocketExtensions
             {
                 webSocketContext = await listenerContext.AcceptWebSocketAsync(subProtocol: null);
                 behavior = behaviorBuilder();
-                if (!behavior.OnValidateContext(webSocketContext))
+                int statusCode = 500;
+                var statusDescription = "BadContext";
+                if (!behavior.OnValidateContext(webSocketContext, ref statusCode , ref statusDescription))
                 {
-                    listenerContext.Response.StatusCode = 500;
+                    listenerContext.Response.StatusDescription = statusDescription;
+                    listenerContext.Response.StatusCode = statusCode;
                     listenerContext.Response.Close();
                     return;
                 }
@@ -159,7 +173,7 @@ namespace WebSocketExtensions
             {
                 listenerContext.Response.StatusCode = 500;
                 listenerContext.Response.Close();
-                
+
                 this._logError($"Exception: {e}");
                 return;
             }
@@ -167,12 +181,12 @@ namespace WebSocketExtensions
             try
             {
 
-                await RecieveLoop( webSocketContext.WebSocket, behavior.OnBinaryMessage, behavior.OnStringMessage, (e) =>
-                {
-                    Interlocked.Decrement(ref count);
-                    this._logInfo($"Client disconnected. now {count} connected clients");
-                    behavior.OnClose(new WebSocketClosedEventArgs(clientId, e.ReceivedResult));
-                });
+                await RecieveLoop(webSocketContext.WebSocket, behavior.OnBinaryMessage, behavior.OnStringMessage, (e) =>
+               {
+                   Interlocked.Decrement(ref count);
+                   this._logInfo($"Client disconnected. now {count} connected clients");
+                   behavior.OnClose(new WebSocketClosedEventArgs(clientId, e.ReceivedResult));
+               });
             }
             finally
             {
