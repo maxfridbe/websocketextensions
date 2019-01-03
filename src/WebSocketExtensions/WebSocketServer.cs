@@ -106,26 +106,21 @@ namespace WebSocketExtensions
 
                         _cts.Token.ThrowIfCancellationRequested();
 
-                        HttpListenerContext listenerContext = await _listener.GetContextAsync();
-                        if (listenerContext.Request.IsWebSocketRequest)
+                        try
                         {
+                            HttpListenerContext listenerContext = await _listener.GetContextAsync().ConfigureAwait(false);
 
-                            Func<WebSocketServerBehavior> builder = null;
-                            if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
-                            {
-                                _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
-                                listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
-                                listenerContext.Response.Close();
-                                continue;
-                            }
-                            ProcessRequest(listenerContext, builder);
+                            _handleContext(listenerContext);
                         }
-                        else
+                        catch (OperationCanceledException)
                         {
-                            _logError("Request recieved is not a websocket request");
-                            listenerContext.Response.StatusCode = 400;
-                            listenerContext.Response.Close();
+                            // We cancelled successfully
                         }
+                        catch (Exception e)
+                        {
+                            _logError(e.ToString());
+                        }
+
                     }
                 }
                 catch (Exception e)
@@ -139,13 +134,36 @@ namespace WebSocketExtensions
             return Task.CompletedTask;
         }
 
+        private void _handleContext(HttpListenerContext listenerContext)
+        {
+            if (listenerContext.Request.IsWebSocketRequest)
+            {
+
+                Func<WebSocketServerBehavior> builder = null;
+                if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
+                {
+                    _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
+                    listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                    listenerContext.Response.Close();
+                }
+                else
+                    ProcessRequest(listenerContext, builder);
+            }
+            else
+            {
+                _logError("Request recieved is not a websocket request");
+                listenerContext.Response.StatusCode = 400;
+                listenerContext.Response.Close();
+            }
+        }
+
         public bool AddRouteBehavior<TBehavior>(string route, Func<TBehavior> p) where TBehavior : WebSocketServerBehavior
         {
             return _behaviors.TryAdd(route, p);
         }
 
 
-        private async void ProcessRequest<TWebSocketBehavior>(HttpListenerContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder) where TWebSocketBehavior : WebSocketServerBehavior
+        private async Task ProcessRequest<TWebSocketBehavior>(HttpListenerContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder) where TWebSocketBehavior : WebSocketServerBehavior
         {
             WebSocketContext webSocketContext = null;
             WebSocketServerBehavior behavior = null;
@@ -156,7 +174,7 @@ namespace WebSocketExtensions
                 behavior = behaviorBuilder();
                 int statusCode = 500;
                 var statusDescription = "BadContext";
-                if (!behavior.OnValidateContext(webSocketContext, ref statusCode , ref statusDescription))
+                if (!behavior.OnValidateContext(webSocketContext, ref statusCode, ref statusDescription))
                 {
                     listenerContext.Response.StatusDescription = statusDescription;
                     listenerContext.Response.StatusCode = statusCode;
@@ -193,7 +211,7 @@ namespace WebSocketExtensions
                 if (webSocketContext.WebSocket != null)
                     webSocketContext.WebSocket.Dispose();
 
-                _cleanup();
+               // _cleanup();
 
 
                 if (!string.IsNullOrEmpty(clientId))

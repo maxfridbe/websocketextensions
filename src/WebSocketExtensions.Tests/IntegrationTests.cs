@@ -197,6 +197,8 @@ namespace WebSocketExtensions.Tests
 
         }
 
+
+
         [Fact]
         public async Task TestClientDispose()
         {
@@ -225,6 +227,47 @@ namespace WebSocketExtensions.Tests
 
             client.Dispose();
             await Task.Delay(100);
+
+            server.Dispose();
+            await Task.Delay(100);
+            //asssert
+            Assert.True(closed);
+
+        }
+
+
+        [Fact]
+        public async Task TestClientDisposeReconnect()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            var closed = false;
+            var client = new WebSocketClient()
+            {
+                CloseHandler = (c) =>
+                    closed = true
+            };
+            await client.ConnectAsync("ws" + u + "aaa");
+
+            //act
+
+            await Task.Delay(100);
+
+            client.Dispose();
+            await Task.Delay(1000);
+
+            //client Reconnect
+            var client2 = new WebSocketClient() { };
+            await client2.ConnectAsync("ws" + u + "aaa");
 
             server.Dispose();
             await Task.Delay(100);
@@ -337,7 +380,7 @@ namespace WebSocketExtensions.Tests
             var client2 = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,
-                CloseHandler = (e) => 
+                CloseHandler = (e) =>
                 kickoffRes = e.ReceivedResult
             };
             await client2.ConnectAsync($"ws://localhost:{port}/aaa");
@@ -354,7 +397,7 @@ namespace WebSocketExtensions.Tests
             while (kickoffRes == null)
             {
                 await Task.Delay(100);
-               
+
             }
             Assert.Equal("dontlikeu", kickoffRes.CloseStatusDescription);
             //assert
