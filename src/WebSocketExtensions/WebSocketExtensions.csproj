@@ -1,7 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net</Description>
     <Authors>Max Fridberg</Authors>
@@ -13,7 +13,7 @@
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
   </PropertyGroup>
 
 </Project>
