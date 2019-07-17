@@ -13,7 +13,7 @@
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
   </PropertyGroup>
 
 </Project>

@@ -9,29 +9,28 @@ namespace WebSocketExtensions
 {
     public abstract class WebSocketReciever
     {
-        internal readonly Action<string, bool> logger;
+        internal readonly Action<string, bool> _logger;
+        private readonly bool _useThreadPool;
 
-        internal WebSocketReciever(Action<string, bool> logger)
+        internal WebSocketReciever(Action<string, bool> logger, bool useThreadPool = true)
         {
-            this.logger = logger;
+            _logger = logger;
+            _useThreadPool = useThreadPool;
         }
 
         internal void _logInfo(string msg)
         {
-            if (logger != null)
-                logger(msg, false);
+            _logger?.Invoke(msg, false);
         }
         internal void _logError(string msg)
         {
-            if (logger != null)
-                logger(msg, true);
+            _logger?.Invoke(msg, true);
         }
-        internal async Task RecieveLoop(
-    WebSocket webSocket,
-    Action<BinaryMessageReceivedEventArgs> binHandler,
-    Action<StringMessageReceivedEventArgs> stringHandler,
-    Action<WebSocketReceivedResultEventArgs> closeHandler,
-    CancellationToken token = default(CancellationToken))
+        internal async Task RecieveLoop(WebSocket webSocket,
+                                        Action<BinaryMessageReceivedEventArgs> binHandler,
+                                        Action<StringMessageReceivedEventArgs> stringHandler,
+                                        Action<WebSocketReceivedResultEventArgs> closeHandler,
+                                        CancellationToken token = default(CancellationToken))
         {
             MemoryStream ms = null;
             try
@@ -54,9 +53,23 @@ namespace WebSocketExtensions
                             {
                                 var arr = ms.ToArray();
                                 if (receivedResult.MessageType == WebSocketMessageType.Binary)
-                                    binHandler(new BinaryMessageReceivedEventArgs(arr, webSocket));
+                                {
+                                    BinaryMessageReceivedEventArgs args = new BinaryMessageReceivedEventArgs(arr, webSocket);
+
+                                    if (_useThreadPool)
+                                        Task.Run(() => binHandler(args));
+                                    else
+                                        binHandler(args);
+
+                                }
                                 else
-                                    stringHandler(new StringMessageReceivedEventArgs(Encoding.UTF8.GetString(arr), webSocket));
+                                {
+                                    var args = new StringMessageReceivedEventArgs(Encoding.UTF8.GetString(arr), webSocket);
+                                    if (_useThreadPool)
+                                        Task.Run(() => stringHandler(args));
+                                    else
+                                        stringHandler(args);
+                                }
                             }
                             ms = new MemoryStream();
                         }
@@ -73,7 +86,7 @@ namespace WebSocketExtensions
             }
             catch (Exception e)
             {
-                this._logError($"Exception: {e}");
+                _logError($"Exception: {e}");
                 if (webSocket.State == WebSocketState.Aborted || webSocket.State == WebSocketState.Closed)
                     closeHandler(new WebSocketReceivedResultEventArgs(e));
 

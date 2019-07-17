@@ -9,7 +9,7 @@ namespace WebSocketExtensions
 {
     public class WebSocketClient : WebSocketReciever, IDisposable
     {
-        public WebSocketClient(Action<string, bool> logger = null) : base(logger)
+        public WebSocketClient(Action<string, bool> logger = null, bool useThreadPool = true) : base(logger, useThreadPool)
         {
 
         }

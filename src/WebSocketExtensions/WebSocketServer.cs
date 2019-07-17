@@ -14,7 +14,7 @@ namespace WebSocketExtensions
     //## The Server class        
     public class WebSocketServer : WebSocketReciever, IDisposable
     {
-        public WebSocketServer(Action<string, bool> logger = null) : base(logger)
+        public WebSocketServer(Action<string, bool> logger = null, bool useThreadPool = true) : base(logger, useThreadPool)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<string, WebSocketContext>();
@@ -211,7 +211,7 @@ namespace WebSocketExtensions
                 if (webSocketContext.WebSocket != null)
                     webSocketContext.WebSocket.Dispose();
 
-               // _cleanup();
+                // _cleanup();
 
 
                 if (!string.IsNullOrEmpty(clientId))
