@@ -186,6 +186,7 @@ namespace WebSocketExtensions
                 _clients.TryAdd(clientId, webSocketContext);
                 Interlocked.Increment(ref count);
                 _logInfo($"Client id:{clientId} accepted now there are {count} clients");
+                behavior.OnClientConnected(clientId);
             }
             catch (Exception e)
             {
