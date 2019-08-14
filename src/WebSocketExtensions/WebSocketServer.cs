@@ -147,7 +147,7 @@ namespace WebSocketExtensions
                     listenerContext.Response.Close();
                 }
                 else
-                    ProcessRequest(listenerContext, builder);
+                    Task.Run(async () => await ProcessRequest(listenerContext, builder));
             }
             else
             {
@@ -217,6 +217,8 @@ namespace WebSocketExtensions
 
                 if (!string.IsNullOrEmpty(clientId))
                     _clients.TryRemove(clientId, out webSocketContext);
+
+                _logInfo($"Completed Receive Loop for clientid {clientId}");
 
             }
         }
