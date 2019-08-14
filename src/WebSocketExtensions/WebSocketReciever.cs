@@ -30,6 +30,7 @@ namespace WebSocketExtensions
                                         Action<BinaryMessageReceivedEventArgs> binHandler,
                                         Action<StringMessageReceivedEventArgs> stringHandler,
                                         Action<WebSocketReceivedResultEventArgs> closeHandler,
+                                        string clientId = null,
                                         CancellationToken token = default(CancellationToken))
         {
             MemoryStream ms = null;
@@ -55,7 +56,7 @@ namespace WebSocketExtensions
                                 if (receivedResult.MessageType == WebSocketMessageType.Binary)
                                 {
                                     BinaryMessageReceivedEventArgs args = new BinaryMessageReceivedEventArgs(arr, webSocket);
-
+                                    args.ClientId = clientId;
                                     if (_useThreadPool)
                                         Task.Run(() => binHandler(args));
                                     else
@@ -65,6 +66,7 @@ namespace WebSocketExtensions
                                 else
                                 {
                                     var args = new StringMessageReceivedEventArgs(Encoding.UTF8.GetString(arr), webSocket);
+                                    args.ClientId = clientId;
                                     if (_useThreadPool)
                                         Task.Run(() => stringHandler(args));
                                     else

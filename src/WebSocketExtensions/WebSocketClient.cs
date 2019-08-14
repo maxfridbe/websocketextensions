@@ -30,7 +30,7 @@ namespace WebSocketExtensions
 
             _tsk = new Task(async () =>
             {
-                await RecieveLoop(_client, BinaryHandler, MessageHandler, CloseHandler, _cts.Token);
+                await RecieveLoop(_client, BinaryHandler, MessageHandler, CloseHandler, null, _cts.Token);
             });
             _tsk.Start();
 

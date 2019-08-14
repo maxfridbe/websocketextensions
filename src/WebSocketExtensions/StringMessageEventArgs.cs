@@ -12,6 +12,7 @@ namespace WebSocketExtensions
         }
 
         public string Data { get; }
+        public string ClientId { get; set; }
         public WebSocket WebSocket { get; }
     }
 }

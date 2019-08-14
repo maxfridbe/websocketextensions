@@ -202,9 +202,9 @@ namespace WebSocketExtensions
                 await RecieveLoop(webSocketContext.WebSocket, behavior.OnBinaryMessage, behavior.OnStringMessage, (e) =>
                {
                    Interlocked.Decrement(ref count);
-                   this._logInfo($"Client disconnected. now {count} connected clients");
+                   this._logInfo($"Client {clientId} disconnected. now {count} connected clients");
                    behavior.OnClose(new WebSocketClosedEventArgs(clientId, e.ReceivedResult));
-               });
+               }, clientId);
             }
             finally
             {
