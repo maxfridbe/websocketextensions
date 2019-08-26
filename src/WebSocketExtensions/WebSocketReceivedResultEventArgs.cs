@@ -5,16 +5,20 @@ namespace WebSocketExtensions
 {
     public class WebSocketReceivedResultEventArgs : EventArgs
     {
+
         public WebSocketReceivedResultEventArgs(Exception ex)
         {
             Exception = ex;
         }
-        public WebSocketReceivedResultEventArgs(WebSocketReceiveResult receiveResult)
+        public WebSocketReceivedResultEventArgs(WebSocketCloseStatus? closeStatus, string closeStatDesc)
         {
-            ReceivedResult = receiveResult;
+            this.CloseStatus = closeStatus;
+            this.CloseStatDescription = closeStatDesc;
         }
 
-        public WebSocketReceiveResult ReceivedResult { get; }
         public Exception Exception { get; }
+        public WebSocketCloseStatus? CloseStatus { get; }
+        public string CloseStatDescription { get; }
+
     }
 }

@@ -9,7 +9,7 @@ namespace WebSocketExtensions
 {
     public class WebSocketClient : WebSocketReciever, IDisposable
     {
-        public WebSocketClient(Action<string, bool> logger = null, bool useThreadPool = true) : base(logger, useThreadPool)
+        public WebSocketClient(Action<string, bool> logger = null) : base(logger)
         {
 
         }
@@ -28,19 +28,77 @@ namespace WebSocketExtensions
 
             await _client.ConnectAsync(new Uri(url), tok);
 
-            _tsk = new Task(async () =>
-            {
-                await RecieveLoop(_client, BinaryHandler, MessageHandler, CloseHandler, null, _cts.Token);
-            });
-            _tsk.Start();
+            var binBeh = MakeSafe(BinaryHandler, "BinaryHandler");
+            var strBeh = MakeSafe(MessageHandler, "MessageHandler");
+            var closeBeh = MakeSafe(CloseHandler, "CloseHandler");
 
+            _tsk = Task.Run(async () =>
+            {
+                var buff = new byte[1048576];
+
+                using (_client)
+                {
+                    while (true)
+                    {
+                        var msg = await _client.ReceiveMessageAsync(buff, null, _cts.Token).ConfigureAwait(false);
+
+                        if (msg.BinData != null)
+                        {
+                            binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, _client));
+                        }
+                        else if (msg.StringData != null)
+                        {
+                            strBeh(new StringMessageReceivedEventArgs(msg.StringData, _client));
+                        }
+                        else if (msg.Exception != null)
+                        {
+                            _logError($"Exception in read thread {msg.Exception}");
+                        }
+                        else
+                        {
+                            this._logInfo($"Websocket Connection Disconnected");
+                            closeBeh(new WebSocketClosedEventArgs(null, msg.WebSocketCloseStatus, msg.CloseStatDesc));
+                            break;
+                        }
+                    }
+
+                }
+
+            });
+        }
+        public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
+        {
+            return new Action<T>((T data) =>
+            {
+                try
+                {
+                    torun(data);
+                }
+                catch (Exception e)
+                {
+                    _logError($"Error in handler {handlerName} {e}");
+                }
+
+            });
 
         }
-
         public void Dispose()
         {
-            _client.Dispose();
+            if (_client.State == WebSocketState.Open)
+            {
+                try
+                {
+                    _client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client Closing", CancellationToken.None).GetAwaiter().GetResult();
+                }
+                catch (Exception e)
+                {
+                    _logError($"Trying to close connection in dispose exception {e}");
+                }
+            }
+
             _cts.Cancel();
+            if (_tsk != null)
+                _tsk.GetAwaiter().GetResult();
         }
 
         public Task SendStringAsync(string data, CancellationToken tok = default(CancellationToken))
