@@ -210,6 +210,9 @@ namespace WebSocketExtensions
                     listenerContext.Response.StatusDescription = statusDescription;
                     listenerContext.Response.StatusCode = statusCode;
                     listenerContext.Response.Close();
+
+                    _logError($"Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
+
                     return;
                 }
                 clientId = behavior.GetClientId(webSocketContext);
