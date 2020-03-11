@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -313,6 +314,57 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+        public async Task TestCreateServerClient_connect_recv_echo_twice ()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = async (e) =>
+            {
+                await e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None);
+                //await Task.Delay(1000);
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+            var tasks = new List<Task>();
+            for (var i = 0; i < 20; i++)
+            {
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
+                    }
+                    catch (Exception e) {
+                    }
+                }));
+
+            }
+            await Task.WhenAll(tasks);
+            await Task.Delay(100);
+
+            //assert
+            //Assert.Equal("hi", t1.res);
+            
+        }
+
+
+        [Fact]
         public async Task TestCreateServerClient_LargeFile()
         {
             //arrange
@@ -381,7 +433,7 @@ namespace WebSocketExtensions.Tests
             {
                 MessageHandler = (e) => res = e.Data,
                 CloseHandler = (e) =>
-                kickoffRes = e.ReceivedResult
+                kickoffRes = new WebSocketReceiveResult(1, WebSocketMessageType.Close, true)
             };
             await client2.ConnectAsync($"ws://localhost:{port}/aaa");
             await client2.SendStringAsync("hi", CancellationToken.None);
