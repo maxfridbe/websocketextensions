@@ -323,10 +323,20 @@ namespace WebSocketExtensions.Tests
             var beh = new testBeh()
             {
             };
-            beh.StringMessageHandler = async (e) =>
+            beh.StringMessageHandler = (e) =>
             {
-                await e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None);
-                //await Task.Delay(1000);
+                //try
+                //{
+                    var data = e.Data;
+                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                    Task.Run(() => e.WebSocket.SendStringAsync(data +  data, CancellationToken.None).GetAwaiter().GetResult());
+                    //await Task.Delay(1000);
+                //}
+                //catch (Exception o)
+                //{
+
+                //}
+
             };
 
             server.AddRouteBehavior("/aaa", () => beh);
@@ -346,12 +356,12 @@ namespace WebSocketExtensions.Tests
             {
                 tasks.Add(Task.Run(() =>
                 {
-                    try
-                    {
+                   // try
+                   // {
                         client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
-                    }
-                    catch (Exception e) {
-                    }
+                  //  }
+                  //  catch (Exception e) {
+                  //  }
                 }));
 
             }
@@ -428,12 +438,12 @@ namespace WebSocketExtensions.Tests
             await client.ConnectAsync($"ws://localhost:{port}/aaa");
             await client.SendStringAsync("hi", CancellationToken.None);
 
-            WebSocketReceiveResult kickoffRes = null;
+            string kickoffRes = null;
             var client2 = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,
                 CloseHandler = (e) =>
-                kickoffRes = new WebSocketReceiveResult(1, WebSocketMessageType.Close, true)
+                kickoffRes = e.CloseStatDescription
             };
             await client2.ConnectAsync($"ws://localhost:{port}/aaa");
             await client2.SendStringAsync("hi", CancellationToken.None);
@@ -451,7 +461,7 @@ namespace WebSocketExtensions.Tests
                 await Task.Delay(100);
 
             }
-            Assert.Equal("dontlikeu", kickoffRes.CloseStatusDescription);
+            Assert.Equal("dontlikeu", kickoffRes);
             //assert
             Assert.Equal("hihi", res);
 
