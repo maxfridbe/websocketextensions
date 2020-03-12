@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -313,6 +314,67 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+        public async Task TestCreateServerClient_connect_recv_echo_twice ()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) =>
+            {
+                //try
+                //{
+                    var data = e.Data;
+                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                    Task.Run(() => e.WebSocket.SendStringAsync(data +  data, CancellationToken.None).GetAwaiter().GetResult());
+                    //await Task.Delay(1000);
+                //}
+                //catch (Exception o)
+                //{
+
+                //}
+
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+            var tasks = new List<Task>();
+            for (var i = 0; i < 20; i++)
+            {
+                tasks.Add(Task.Run(() =>
+                {
+                   // try
+                   // {
+                        client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
+                  //  }
+                  //  catch (Exception e) {
+                  //  }
+                }));
+
+            }
+            await Task.WhenAll(tasks);
+            await Task.Delay(100);
+
+            //assert
+            //Assert.Equal("hi", t1.res);
+            
+        }
+
+
+        [Fact]
         public async Task TestCreateServerClient_LargeFile()
         {
             //arrange
@@ -376,12 +438,12 @@ namespace WebSocketExtensions.Tests
             await client.ConnectAsync($"ws://localhost:{port}/aaa");
             await client.SendStringAsync("hi", CancellationToken.None);
 
-            WebSocketReceiveResult kickoffRes = null;
+            string kickoffRes = null;
             var client2 = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,
                 CloseHandler = (e) =>
-                kickoffRes = e.ReceivedResult
+                kickoffRes = e.CloseStatDescription
             };
             await client2.ConnectAsync($"ws://localhost:{port}/aaa");
             await client2.SendStringAsync("hi", CancellationToken.None);
@@ -399,7 +461,7 @@ namespace WebSocketExtensions.Tests
                 await Task.Delay(100);
 
             }
-            Assert.Equal("dontlikeu", kickoffRes.CloseStatusDescription);
+            Assert.Equal("dontlikeu", kickoffRes);
             //assert
             Assert.Equal("hihi", res);
 
