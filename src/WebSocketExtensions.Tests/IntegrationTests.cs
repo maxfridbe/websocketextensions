@@ -352,7 +352,7 @@ namespace WebSocketExtensions.Tests
 
             //act
             var tasks = new List<Task>();
-            for (var i = 0; i < 20; i++)
+            for (var i = 0; i < 400; i++)
             {
                 tasks.Add(Task.Run(() =>
                 {
@@ -431,14 +431,17 @@ namespace WebSocketExtensions.Tests
             await server.StartAsync($"http://localhost:{port}/");
 
             string res = null;
+            string kickoffRes = null;
+
             var client = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,
+                CloseHandler = (e) =>
+                    kickoffRes = e.CloseStatDescription
             };
             await client.ConnectAsync($"ws://localhost:{port}/aaa");
             await client.SendStringAsync("hi", CancellationToken.None);
 
-            string kickoffRes = null;
             var client2 = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,

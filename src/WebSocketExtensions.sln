@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebSocketExtensions.Playgro
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebSocketExtensions.Tests", "WebSocketExtensions.Tests\WebSocketExtensions.Tests.csproj", "{1EAC3D3D-A10A-4AAF-86FA-7B40548138F9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WEbSocketExtensions.NF_Playground", "WEbSocketExtensions.NF_Playground\WEbSocketExtensions.NF_Playground.csproj", "{D562F4F3-03DF-4B55-90AD-AA315FCA718C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{1EAC3D3D-A10A-4AAF-86FA-7B40548138F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1EAC3D3D-A10A-4AAF-86FA-7B40548138F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1EAC3D3D-A10A-4AAF-86FA-7B40548138F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D562F4F3-03DF-4B55-90AD-AA315FCA718C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D562F4F3-03DF-4B55-90AD-AA315FCA718C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D562F4F3-03DF-4B55-90AD-AA315FCA718C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D562F4F3-03DF-4B55-90AD-AA315FCA718C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

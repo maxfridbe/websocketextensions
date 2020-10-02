@@ -47,7 +47,8 @@ namespace WebSocketExtensions
                         {
 
                             if (webSocket.State != WebSocketState.Closed)
-                                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+                                await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Honoring disconnect", token);
+                               // Task.Run(() => webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Ack Disconnect Req", CancellationToken.None));
 
                             var closeStat = receivedResult.CloseStatus;
                             var closeStatDesc = receivedResult.CloseStatusDescription;
@@ -60,6 +61,16 @@ namespace WebSocketExtensions
                     return new WebSocketMessage(null, $"Websocket State is {webSocket.State}");
                 }
 
+            }
+            catch (WebSocketException ex)
+            {
+                switch (ex.WebSocketErrorCode)
+                {
+                    case WebSocketError.ConnectionClosedPrematurely:
+                        return new WebSocketMessage(WebSocketCloseStatus.EndpointUnavailable, "Connection Closed Prematurely");
+                    default:
+                        return new WebSocketMessage(ex);
+                }
             }
             catch (Exception e)
             {

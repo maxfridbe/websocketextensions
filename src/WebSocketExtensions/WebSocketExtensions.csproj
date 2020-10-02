@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net472;net48</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net</Description>
+    <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net, A drop in replacement for WebSocketSharp</Description>
     <Authors>Max Fridberg</Authors>
     <Company />
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
@@ -13,7 +13,7 @@
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>1.0.12</Version>
+    <Version>1.0.13</Version>
   </PropertyGroup>
 
 </Project>

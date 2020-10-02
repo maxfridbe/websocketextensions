@@ -96,6 +96,8 @@ namespace WebSocketExtensions
                 }
             }
 
+            _client.CleanupSendMutex();
+
             _cts.Cancel();
             if (_tsk != null)
                 _tsk.GetAwaiter().GetResult();

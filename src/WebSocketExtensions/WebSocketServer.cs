@@ -41,7 +41,7 @@ namespace WebSocketExtensions
         {
             WebSocketContext ctx = null;
             _clients.TryGetValue(clientId, out ctx);
-            return ctx.WebSocket.CloseAsync(status, description, CancellationToken.None);
+            return ctx.WebSocket.SendCloseAsync(status, description, CancellationToken.None);
         }
         public Task SendStreamAsync(string clientId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
@@ -261,8 +261,6 @@ namespace WebSocketExtensions
                         }
                         else
                         {
-                            Interlocked.Decrement(ref count);
-                            this._logInfo($"Client {clientId} disconnected. now {count} connected clients");
                             closeBeh(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
                             break;
                         }
@@ -272,11 +270,17 @@ namespace WebSocketExtensions
             }
             finally
             {
+                Interlocked.Decrement(ref count);
+                this._logInfo($"Client {clientId??"_unidentified_"} disconnected. now {count} connected clients");
+
+                webSocketContext?.WebSocket.CleanupSendMutex();
 
                 if (!string.IsNullOrEmpty(clientId))
+                {
                     _clients.TryRemove(clientId, out webSocketContext);
 
-                _logInfo($"Completed Receive Loop for clientid {clientId}");
+                }
+                _logInfo($"Completed Receive Loop for clientid {clientId ?? "_unidentified_"}");
 
             }
         }
