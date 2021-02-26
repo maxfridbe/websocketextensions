@@ -77,12 +77,13 @@ namespace WebSocketExtensions
             {
                 _cts.Cancel();
             }
-            
+
             _clients.Clear();
             if (_listenTask != null && !_listenTask.IsCompleted)
                 _listenTask.GetAwaiter().GetResult();
 
         }
+
         public Task StartAsync(string listenerPrefix, CancellationToken listeningToken = default(CancellationToken))
         {
             _stopListeningThread();
@@ -106,12 +107,12 @@ namespace WebSocketExtensions
                     else
                     {
                         listenerThredStarted.TrySetResult(true);
-                        using(_httpListener)
+                        using (_httpListener)
                             await ListenLoop(_httpListener, _cts.Token);
                     }
 
                 }
-               
+
                 catch (Exception e)
                 {
                     _logError(e.ToString());
@@ -176,7 +177,7 @@ namespace WebSocketExtensions
         }
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {
-            
+
             return new Action<T>((T data) =>
             {
                 try
@@ -193,7 +194,7 @@ namespace WebSocketExtensions
         }
 
 
-        private async Task HandleClient<TWebSocketBehavior>(HttpListenerContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token) 
+        private async Task HandleClient<TWebSocketBehavior>(HttpListenerContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
             where TWebSocketBehavior : WebSocketServerBehavior
         {
             WebSocketContext webSocketContext = null;
@@ -243,27 +244,47 @@ namespace WebSocketExtensions
                     //recieve Loop
                     var buff = new byte[1048576];
 
-                    while (true)
-                    {
-                        var msg = await webSocketContext.WebSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
+                    var messageQueue = new BlockingCollection<WebSocketMessage>();
 
-                        if (msg.BinData != null)
+                    new Thread(() =>
+                    {
+                        foreach (var msg in messageQueue.GetConsumingEnumerable())
                         {
-                            binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocketContext.WebSocket));
+                            if (msg.BinData != null)
+                            {
+                                binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocketContext.WebSocket));
+                            }
+                            else if (msg.StringData != null)
+                            {
+                                strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocketContext.WebSocket));
+                            }
+                            else if (msg.Exception != null)
+                            {
+                                _logError($"Exception in read thread {msg.Exception}");
+                            }
+                            else
+                            {
+                                closeBeh(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
+                                break;
+                            }
                         }
-                        else if (msg.StringData != null)
+
+                        messageQueue.Dispose();
+                        messageQueue = null;
+                    }).Start();
+
+                    try
+                    {
+                        while (true)
                         {
-                            strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocketContext.WebSocket));
+                            var msg = await webSocketContext.WebSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
+
+                            messageQueue.Add(msg);
                         }
-                        else if (msg.Exception != null)
-                        {
-                            _logError($"Exception in read thread {msg.Exception}");
-                        }
-                        else
-                        {
-                            closeBeh(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
-                            break;
-                        }
+                    }
+                    finally
+                    {
+                        messageQueue?.CompleteAdding();
                     }
                 }
 
@@ -271,7 +292,7 @@ namespace WebSocketExtensions
             finally
             {
                 Interlocked.Decrement(ref count);
-                this._logInfo($"Client {clientId??"_unidentified_"} disconnected. now {count} connected clients");
+                this._logInfo($"Client {clientId ?? "_unidentified_"} disconnected. now {count} connected clients");
 
                 webSocketContext?.WebSocket.CleanupSendMutex();
 
