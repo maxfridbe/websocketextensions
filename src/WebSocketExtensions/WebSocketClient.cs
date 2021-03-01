@@ -9,13 +9,13 @@ namespace WebSocketExtensions
 {
     public class WebSocketClient : WebSocketReciever, IDisposable
     {
-        public WebSocketClient(Action<string, bool> logger = null) : base(logger)
+        public WebSocketClient(Action<string, bool> logger = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
         {
-
+            _recieveQueueLimitBytes = recieveQueueLimitBytes;
         }
         private ClientWebSocket _client;
         private Task _tsk;
-
+        private long _recieveQueueLimitBytes = long.MaxValue;
         CancellationTokenSource _cts = new CancellationTokenSource();
         public Action<StringMessageReceivedEventArgs> MessageHandler { get; set; } = (e) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryHandler { get; set; } = (e) => { };
@@ -32,39 +32,8 @@ namespace WebSocketExtensions
             var strBeh = MakeSafe(MessageHandler, "MessageHandler");
             var closeBeh = MakeSafe(CloseHandler, "CloseHandler");
 
-            _tsk = Task.Run(async () =>
-            {
-                var buff = new byte[1048576];
-
-                using (_client)
-                {
-                    while (true)
-                    {
-                        var msg = await _client.ReceiveMessageAsync(buff, null, _cts.Token).ConfigureAwait(false);
-
-                        if (msg.BinData != null)
-                        {
-                            binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, _client));
-                        }
-                        else if (msg.StringData != null)
-                        {
-                            strBeh(new StringMessageReceivedEventArgs(msg.StringData, _client));
-                        }
-                        else if (msg.Exception != null)
-                        {
-                            _logError($"Exception in read thread {msg.Exception}");
-                        }
-                        else
-                        {
-                            this._logInfo($"Websocket Connection Disconnected");
-                            closeBeh(new WebSocketClosedEventArgs(null, msg.WebSocketCloseStatus, msg.CloseStatDesc));
-                            break;
-                        }
-                    }
-
-                }
-
-            });
+            _tsk = _client.ProcessIncomingMessages(strBeh, binBeh, closeBeh, _logError, _logInfo, null, _recieveQueueLimitBytes, tok);
+           
         }
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {

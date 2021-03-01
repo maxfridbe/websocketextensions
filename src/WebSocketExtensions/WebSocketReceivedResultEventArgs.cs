@@ -16,9 +16,9 @@ namespace WebSocketExtensions
             this.CloseStatDescription = closeStatDesc;
         }
 
-        public Exception Exception { get; }
-        public WebSocketCloseStatus? CloseStatus { get; }
-        public string CloseStatDescription { get; }
+        public Exception Exception { get; internal set; }
+        public WebSocketCloseStatus? CloseStatus { get; internal set; }
+        public string CloseStatDescription { get; internal set; }
 
     }
 }

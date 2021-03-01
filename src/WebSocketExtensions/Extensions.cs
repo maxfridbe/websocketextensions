@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -48,7 +49,7 @@ namespace WebSocketExtensions
 
                             if (webSocket.State != WebSocketState.Closed)
                                 await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Honoring disconnect", token);
-                               // Task.Run(() => webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Ack Disconnect Req", CancellationToken.None));
+                            // Task.Run(() => webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Ack Disconnect Req", CancellationToken.None));
 
                             var closeStat = receivedResult.CloseStatus;
                             var closeStatDesc = receivedResult.CloseStatusDescription;
@@ -76,6 +77,81 @@ namespace WebSocketExtensions
             {
                 return new WebSocketMessage(e);
 
+            }
+        }
+
+        public static async Task ProcessIncomingMessages(
+            this WebSocket webSocket
+            , Action<StringMessageReceivedEventArgs> strBeh
+           , Action<BinaryMessageReceivedEventArgs> binBeh
+           , Action<WebSocketReceivedResultEventArgs> CloseHandler
+          , Action<string> logError
+            , Action<string> logInfo = null
+           , string clientId = null
+            , long queueThrottleLimitBytes = long.MaxValue
+            , CancellationToken token = default(CancellationToken))
+        {
+            //recieve Loop
+            var buff = new byte[1048576];
+
+            var messageQueue = new BlockingCollection<WebSocketMessage>();
+            long queueBinarySize = 0;
+
+            new Thread(() =>
+            {
+                foreach (var msg in messageQueue.GetConsumingEnumerable())
+                {
+                    if (msg.BinData != null)
+                    {
+                        binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocket));
+                        queueBinarySize -= msg.BinData.Length;
+                    }
+                    else if (msg.StringData != null)
+                    {
+                        strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocket));
+                    }
+                    else if (msg.Exception != null)
+                    {
+                        logError($"Exception in read thread {msg.Exception}");
+                    }
+                }
+
+                messageQueue.Dispose();
+                messageQueue = null;
+            }).Start();
+
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    var msg = await webSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
+
+                    if (msg.BinData == null && msg.Exception == null && msg.StringData == null)
+                    {
+                        logInfo?.Invoke($"Websocket Connection Disconnected");
+                        CloseHandler(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
+                        break;
+                    }
+
+                    messageQueue.Add(msg);
+
+                    if (msg.BinData != null)
+                    {
+                        queueBinarySize += msg.BinData.Length;
+                    }
+
+                    if (queueBinarySize > queueThrottleLimitBytes)
+                    {
+                        for (int sleeper = 0; sleeper < 40 && queueBinarySize > queueThrottleLimitBytes; sleeper++)
+                        {
+                            await Task.Delay(50);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                messageQueue?.CompleteAdding();
             }
         }
 

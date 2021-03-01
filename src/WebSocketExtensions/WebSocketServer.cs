@@ -239,71 +239,11 @@ namespace WebSocketExtensions
             {
                 using (webSocketContext.WebSocket)
                 {
-                    var closeBeh = MakeSafe<WebSocketClosedEventArgs>(behavior.OnClose, "behavior.OnClose");
+                    var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(clientId, r)), "behavior.OnClose");
                     var strBeh = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binBeh = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
 
-                    //recieve Loop
-                    var buff = new byte[1048576];
-
-                    var messageQueue = new BlockingCollection<WebSocketMessage>();
-
-                    long queueBinarySize = 0;
-
-                    new Thread(() =>
-                    {
-                        foreach (var msg in messageQueue.GetConsumingEnumerable())
-                        {
-                            if (msg.BinData != null)
-                            {
-                                binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocketContext.WebSocket));
-                                queueBinarySize -= msg.BinData.Length;
-                            }
-                            else if (msg.StringData != null)
-                            {
-                                strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocketContext.WebSocket));
-                            }
-                            else if (msg.Exception != null)
-                            {
-                                _logError($"Exception in read thread {msg.Exception}");
-                            }
-                            else
-                            {
-                                closeBeh(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
-                                break;
-                            }
-                        }
-
-                        messageQueue.Dispose();
-                        messageQueue = null;
-                    }).Start();
-
-                    try
-                    {
-                        while (true)
-                        {
-                            var msg = await webSocketContext.WebSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
-
-                            messageQueue.Add(msg);
-
-                            if (msg.BinData != null)
-                            {
-                                queueBinarySize += msg.BinData.Length;
-                            }
-
-                            if (queueBinarySize > _queueThrottleLimit)
-                            {
-                                for (int sleeper = 0; sleeper < 40 && queueBinarySize > _queueThrottleLimit; sleeper++)
-                                {
-                                    await Task.Delay(50);
-                                }
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        messageQueue?.CompleteAdding();
-                    }
+                    await webSocketContext.WebSocket.ProcessIncomingMessages(strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, _queueThrottleLimit, token);
                 }
 
             }
