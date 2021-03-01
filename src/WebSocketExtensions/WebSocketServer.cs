@@ -14,10 +14,11 @@ namespace WebSocketExtensions
     //## The Server class        
     public class WebSocketServer : WebSocketReciever, IDisposable
     {
-        public WebSocketServer(Action<string, bool> logger = null) : base(logger)
+        public WebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<string, WebSocketContext>();
+            _queueThrottleLimit = queueThrottleLimitBytes;
         }
         private int count = 0;
         private ConcurrentDictionary<string, Func<WebSocketServerBehavior>> _behaviors;
@@ -25,6 +26,7 @@ namespace WebSocketExtensions
         private HttpListener _httpListener;
         private Task _listenTask;
         private ConcurrentDictionary<string, WebSocketContext> _clients;
+        private readonly long _queueThrottleLimit;
 
 
         public IList<string> GetActiveClientIds()
@@ -246,6 +248,8 @@ namespace WebSocketExtensions
 
                     var messageQueue = new BlockingCollection<WebSocketMessage>();
 
+                    long queueBinarySize = 0;
+
                     new Thread(() =>
                     {
                         foreach (var msg in messageQueue.GetConsumingEnumerable())
@@ -253,6 +257,7 @@ namespace WebSocketExtensions
                             if (msg.BinData != null)
                             {
                                 binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocketContext.WebSocket));
+                                queueBinarySize -= msg.BinData.Length;
                             }
                             else if (msg.StringData != null)
                             {
@@ -280,6 +285,19 @@ namespace WebSocketExtensions
                             var msg = await webSocketContext.WebSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
 
                             messageQueue.Add(msg);
+
+                            if (msg.BinData != null)
+                            {
+                                queueBinarySize += msg.BinData.Length;
+                            }
+
+                            if (queueBinarySize > _queueThrottleLimit)
+                            {
+                                for (int sleeper = 0; sleeper < 40 && queueBinarySize > _queueThrottleLimit; sleeper++)
+                                {
+                                    await Task.Delay(50);
+                                }
+                            }
                         }
                     }
                     finally

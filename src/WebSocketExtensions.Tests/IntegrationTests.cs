@@ -471,5 +471,82 @@ namespace WebSocketExtensions.Tests
         }
 
 
+        [Fact]
+        public async Task TestCreateServer_connect_recv_echo_exception()
+        {
+            //arrange
+            var server = new WebSocketServer();
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) => {
+                throw new Exception("arghhh"); };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            var client = new ClientWebSocket();
+            await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
+
+            //act
+            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
+
+            await Task.Delay(100);
+
+
+
+            Assert.Equal(client.State, WebSocketState.Open);
+         //   var read = await client.ReceiveAsync(new ArraySegment<byte>(byt), CancellationToken.None);
+
+
+            //assert
+            //Assert.Equal("hihi", Encoding.UTF8.GetString(new ArraySegment<byte>(byt, 0, read.Count)));
+
+        }
+
+
+
+        [Fact]
+        public async Task TestCreateServerClient_LoadThrottling()
+        {
+            //arrange
+            var server = new WebSocketServer(queueThrottleLimitBytes: 200L * 1024 * 1024);// 
+            var port = _FreeTcpPort();
+
+            var beh = new testBeh()
+            {
+            };
+            beh.BinaryMessageHandler = (e) =>
+            {
+                Thread.Sleep(200);
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+            for (int i = 0; i < 200; i++)
+            {
+
+                var s = _getFile("tst2", 10);
+                await client.SendStreamAsync(File.OpenRead(s));
+                await Task.Delay(1);
+                //Assert.Equal(new FileInfo(s).Length, recievedSize);
+            }
+            //assert
+
+        }
+
+
     }
 }
