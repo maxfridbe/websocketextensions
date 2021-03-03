@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -8,6 +10,7 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
+
     public static class Extensions
     {
 
@@ -88,7 +91,7 @@ namespace WebSocketExtensions
           , Action<string> logError
             , Action<string> logInfo = null
            , string clientId = null
-            , long queueThrottleLimitBytes = long.MaxValue
+            , long pageAfterBytes = long.MaxValue
             , CancellationToken token = default(CancellationToken))
         {
             //recieve Loop
@@ -101,18 +104,23 @@ namespace WebSocketExtensions
             {
                 foreach (var msg in messageQueue.GetConsumingEnumerable())
                 {
-                    if (msg.BinData != null)
+                    using (msg)
                     {
-                        binBeh(new BinaryMessageReceivedEventArgs(msg.BinData, webSocket));
-                        queueBinarySize -= msg.BinData.Length;
-                    }
-                    else if (msg.StringData != null)
-                    {
-                        strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocket));
-                    }
-                    else if (msg.Exception != null)
-                    {
-                        logError($"Exception in read thread {msg.Exception}");
+                        if (msg.BinDataLen > 0)
+                        {
+                            binBeh(new BinaryMessageReceivedEventArgs(msg.GetBinData(), webSocket));
+
+                            if(msg.NotPaged)
+                                queueBinarySize -= msg.BinDataLen;
+                        }
+                        else if (msg.StringData != null)
+                        {
+                            strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocket));
+                        }
+                        else if (msg.Exception != null)
+                        {
+                            logError($"Exception in read thread {msg.Exception}");
+                        }
                     }
                 }
 
@@ -126,27 +134,25 @@ namespace WebSocketExtensions
                 {
                     var msg = await webSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
 
-                    if (msg.BinData == null && msg.Exception == null && msg.StringData == null)
+                    if (msg.IsDisconnect)
                     {
                         logInfo?.Invoke($"Websocket Connection Disconnected");
                         CloseHandler(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
                         break;
                     }
 
+                    if(queueBinarySize + msg.BinDataLen > pageAfterBytes)
+                    {
+                        msg.PageBinData();
+                    }
+                    else
+                    {
+                        queueBinarySize += msg.BinDataLen;
+                    }
+                
                     messageQueue.Add(msg);
-
-                    if (msg.BinData != null)
-                    {
-                        queueBinarySize += msg.BinData.Length;
-                    }
-
-                    if (queueBinarySize > queueThrottleLimitBytes)
-                    {
-                        for (int sleeper = 0; sleeper < 40 && queueBinarySize > queueThrottleLimitBytes; sleeper++)
-                        {
-                            await Task.Delay(50);
-                        }
-                    }
+                    
+                    
                 }
             }
             finally

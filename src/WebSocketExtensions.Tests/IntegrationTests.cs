@@ -481,7 +481,14 @@ namespace WebSocketExtensions.Tests
             var beh = new testBeh()
             {
             };
+            bool exceptionoccured = false;
             beh.StringMessageHandler = (e) => {
+                if (exceptionoccured)
+                {
+                    e.WebSocket.SendStringAsync("hihi");
+                    return;
+                }
+                exceptionoccured = true;
                 throw new Exception("arghhh"); };
 
             server.AddRouteBehavior("/aaa", () => beh);
@@ -489,20 +496,24 @@ namespace WebSocketExtensions.Tests
 
             var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
-
+            
             //act
             await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
 
             await Task.Delay(100);
 
 
-
+            Assert.Equal(true, exceptionoccured);
             Assert.Equal(client.State, WebSocketState.Open);
-         //   var read = await client.ReceiveAsync(new ArraySegment<byte>(byt), CancellationToken.None);
+            var byt = new byte[2000];
+            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
+
+            var read = await client.ReceiveAsync(new ArraySegment<byte>(byt), CancellationToken.None);
 
 
             //assert
-            //Assert.Equal("hihi", Encoding.UTF8.GetString(new ArraySegment<byte>(byt, 0, read.Count)));
+
+            Assert.Equal("hihi", Encoding.UTF8.GetString(new ArraySegment<byte>(byt, 0, read.Count)));
 
         }
 
