@@ -6,10 +6,7 @@ namespace WebSocketExtensions
 {
     public class WebSocketMessage : IDisposable
     {
-        private static string tempdir = Path.GetTempPath();
-
-
-        public WebSocketMessage(byte[] data) { _bindata = data; BinDataLen = _bindata.Length; }
+        public WebSocketMessage(byte[] data) { _bindata = data; BinDataLen = _bindata.Length; IsBinary = true; }
         public WebSocketMessage(string data) { StringData = data; }
         public WebSocketMessage(Exception e)
         {
@@ -24,13 +21,15 @@ namespace WebSocketExtensions
 
         public void PageBinData()
         {
-            _pagePath = Path.Combine(tempdir, Path.GetTempFileName());
+            _pagePath = Path.GetTempFileName();
             File.WriteAllBytes(_pagePath, _bindata);//todo async
             _bindata = null;
         }
         private byte[] _bindata = null;
         private string _pagePath = null;
         public long BinDataLen { get; private set; } = 0;
+        public bool IsBinary { get; }
+
         public byte[] GetBinData()
         {
             if (_bindata != null)
@@ -45,7 +44,7 @@ namespace WebSocketExtensions
             if (!string.IsNullOrWhiteSpace(_pagePath))
                 File.Delete(_pagePath);
         }
-        public bool NotPaged =>  _bindata != null;
+        public bool InMemory =>  _bindata != null;
         public string StringData { get; private set; }
         public WebSocketCloseStatus? WebSocketCloseStatus { get; private set; }
         public string CloseStatDesc { get; private set; }

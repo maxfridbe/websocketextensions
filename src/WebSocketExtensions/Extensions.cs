@@ -106,11 +106,11 @@ namespace WebSocketExtensions
                 {
                     using (msg)
                     {
-                        if (msg.BinDataLen > 0)
+                        if (msg.IsBinary)
                         {
                             binBeh(new BinaryMessageReceivedEventArgs(msg.GetBinData(), webSocket));
 
-                            if(msg.NotPaged)
+                            if(msg.InMemory)
                                 queueBinarySize -= msg.BinDataLen;
                         }
                         else if (msg.StringData != null)
@@ -123,6 +123,7 @@ namespace WebSocketExtensions
                         }
                     }
                 }
+
 
                 messageQueue.Dispose();
                 messageQueue = null;
@@ -141,13 +142,16 @@ namespace WebSocketExtensions
                         break;
                     }
 
-                    if(queueBinarySize + msg.BinDataLen > pageAfterBytes)
+                    if (msg.IsBinary)
                     {
-                        msg.PageBinData();
-                    }
-                    else
-                    {
-                        queueBinarySize += msg.BinDataLen;
+                        if ((queueBinarySize + msg.BinDataLen) > pageAfterBytes)
+                        {
+                            msg.PageBinData();
+                        }
+                        else
+                        {
+                            queueBinarySize += msg.BinDataLen;
+                        }
                     }
                 
                     messageQueue.Add(msg);
