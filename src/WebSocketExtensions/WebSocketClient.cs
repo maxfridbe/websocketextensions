@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -17,6 +18,7 @@ namespace WebSocketExtensions
         private Task _tsk;
         private long _recieveQueueLimitBytes = long.MaxValue;
         CancellationTokenSource _cts = new CancellationTokenSource();
+        private PagingMessageQueue _messageQueue;
         public Action<StringMessageReceivedEventArgs> MessageHandler { get; set; } = (e) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryHandler { get; set; } = (e) => { };
         public Action<WebSocketReceivedResultEventArgs> CloseHandler { get; set; } = (e) => { };
@@ -31,8 +33,10 @@ namespace WebSocketExtensions
             var binBeh = MakeSafe(BinaryHandler, "BinaryHandler");
             var strBeh = MakeSafe(MessageHandler, "MessageHandler");
             var closeBeh = MakeSafe(CloseHandler, "CloseHandler");
-
-            _tsk = _client.ProcessIncomingMessages(strBeh, binBeh, closeBeh, _logError, _logInfo, null, _recieveQueueLimitBytes, tok);
+            
+            _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
+            
+            _tsk = _client.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, null, tok);
            
         }
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)

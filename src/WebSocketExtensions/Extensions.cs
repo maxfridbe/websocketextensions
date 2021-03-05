@@ -10,13 +10,12 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-
+    
     public static class Extensions
     {
 
         public async static Task<WebSocketMessage> ReceiveMessageAsync(this WebSocket webSocket,
                                         byte[] buff,
-                                        string clientId = null,
                                         CancellationToken token = default(CancellationToken))
         {
 
@@ -85,83 +84,30 @@ namespace WebSocketExtensions
 
         public static async Task ProcessIncomingMessages(
             this WebSocket webSocket
+            , PagingMessageQueue messageQueue
             , Action<StringMessageReceivedEventArgs> strBeh
-           , Action<BinaryMessageReceivedEventArgs> binBeh
-           , Action<WebSocketReceivedResultEventArgs> CloseHandler
-          , Action<string> logError
-            , Action<string> logInfo = null
-           , string clientId = null
-            , long pageAfterBytes = long.MaxValue
+            , Action<BinaryMessageReceivedEventArgs> binBeh
+            , Action<WebSocketReceivedResultEventArgs> CloseHandler
+            , Action<string> logError
+            , Action<string> logInfo
+            , string clientId = null
             , CancellationToken token = default(CancellationToken))
         {
-            //recieve Loop
             var buff = new byte[1048576];
-
-            var messageQueue = new BlockingCollection<WebSocketMessage>();
-            long queueBinarySize = 0;
-
-            new Thread(() =>
+            
+            while (!token.IsCancellationRequested)
             {
-                foreach (var msg in messageQueue.GetConsumingEnumerable())
+                var msg = await webSocket.ReceiveMessageAsync(buff, token).ConfigureAwait(false);
+
+                if (msg.IsDisconnect)
                 {
-                    using (msg)
-                    {
-                        if (msg.IsBinary)
-                        {
-                            binBeh(new BinaryMessageReceivedEventArgs(msg.GetBinData(), webSocket));
-
-                            if(msg.InMemory)
-                                queueBinarySize -= msg.BinDataLen;
-                        }
-                        else if (msg.StringData != null)
-                        {
-                            strBeh(new StringMessageReceivedEventArgs(msg.StringData, webSocket));
-                        }
-                        else if (msg.Exception != null)
-                        {
-                            logError($"Exception in read thread {msg.Exception}");
-                        }
-                    }
+                    logInfo.Invoke($"Websocket Connection Disconnected");
+                    CloseHandler(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
+                    break;
                 }
-
-
-                messageQueue.Dispose();
-                messageQueue = null;
-            }).Start();
-
-            try
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    var msg = await webSocket.ReceiveMessageAsync(buff, clientId, token).ConfigureAwait(false);
-
-                    if (msg.IsDisconnect)
-                    {
-                        logInfo?.Invoke($"Websocket Connection Disconnected");
-                        CloseHandler(new WebSocketClosedEventArgs(clientId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
-                        break;
-                    }
-
-                    if (msg.IsBinary)
-                    {
-                        if ((queueBinarySize + msg.BinDataLen) > pageAfterBytes)
-                        {
-                            msg.PageBinData();
-                        }
-                        else
-                        {
-                            queueBinarySize += msg.BinDataLen;
-                        }
-                    }
-                
-                    messageQueue.Add(msg);
-                    
-                    
-                }
-            }
-            finally
-            {
-                messageQueue?.CompleteAdding();
+                msg.SetHandlers(strBeh, binBeh, webSocket);
+               
+                messageQueue.Push(msg);
             }
         }
 

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
+
     //## The Server class        
     public class WebSocketServer : WebSocketReciever, IDisposable
     {
@@ -26,6 +27,7 @@ namespace WebSocketExtensions
         private HttpListener _httpListener;
         private Task _listenTask;
         private ConcurrentDictionary<string, WebSocketContext> _clients;
+        private PagingMessageQueue _messageQueue;
         private readonly long _queueThrottleLimit;
 
 
@@ -96,7 +98,9 @@ namespace WebSocketExtensions
             _httpListener.Prefixes.Add(listenerPrefix);
             _httpListener.Start();
             _logInfo($"Listener Started on {listenerPrefix}");
+            _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _queueThrottleLimit);
 
+          
 
             _listenTask = Task.Run(async () =>
             {
@@ -112,12 +116,10 @@ namespace WebSocketExtensions
                         using (_httpListener)
                             await ListenLoop(_httpListener, _cts.Token);
                     }
-
                 }
-
                 catch (Exception e)
                 {
-                    _logError(e.ToString());
+                    _logError("WebSocketServer: Exception in the listenTask" + e.ToString());
                 }
             });
 
@@ -243,7 +245,7 @@ namespace WebSocketExtensions
                     var strBeh = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binBeh = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
 
-                    await webSocketContext.WebSocket.ProcessIncomingMessages(strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, _queueThrottleLimit, token);
+                    await webSocketContext.WebSocket.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, token);
                 }
 
             }
@@ -267,6 +269,7 @@ namespace WebSocketExtensions
         public void Dispose()
         {
             _stopListeningThread();
+            _messageQueue?.CompleteAdding();
         }
     }
 }

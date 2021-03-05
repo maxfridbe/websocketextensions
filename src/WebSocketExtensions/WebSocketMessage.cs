@@ -18,6 +18,34 @@ namespace WebSocketExtensions
             CloseStatDesc = closeStatDesc;
             IsDisconnect = true;
         }
+        public Action<StringMessageReceivedEventArgs> StringBehavior { get; private set; }
+        public Action<BinaryMessageReceivedEventArgs> BinaryBehavior { get; private set; }
+
+        private WebSocket _ws;
+
+        public void SetHandlers(
+            Action<StringMessageReceivedEventArgs> strBeh
+           , Action<BinaryMessageReceivedEventArgs> binBeh
+            , WebSocket ws)
+        {
+            StringBehavior = strBeh;
+            BinaryBehavior = binBeh;
+            _ws = ws;
+        }
+        public void HandleMessage(Action<string> logError)
+        {
+            if (IsBinary) {
+                var args = new BinaryMessageReceivedEventArgs(GetBinData(), _ws);
+                BinaryBehavior(args);
+            }else if (StringData != null)
+            {
+                var args = new StringMessageReceivedEventArgs(StringData, _ws);
+                StringBehavior(args);
+            }else  if (Exception != null)
+            {
+                logError($"Exception in read thread {Exception}");
+            }
+        }
 
         public void PageBinData()
         {
