@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-    
+
     public static class Extensions
     {
 
@@ -72,12 +72,12 @@ namespace WebSocketExtensions
                     case WebSocketError.ConnectionClosedPrematurely:
                         return new WebSocketMessage(WebSocketCloseStatus.EndpointUnavailable, "Connection Closed Prematurely");
                     default:
-                        return new WebSocketMessage(ex);
+                        return new WebSocketMessage($"ErrorCode: {ex.WebSocketErrorCode}", ex);
                 }
             }
             catch (Exception e)
             {
-                return new WebSocketMessage(e);
+                return new WebSocketMessage("Non WebSocketException", e);
 
             }
         }
@@ -94,7 +94,7 @@ namespace WebSocketExtensions
             , CancellationToken token = default(CancellationToken))
         {
             var buff = new byte[1048576];
-            
+
             while (!token.IsCancellationRequested)
             {
                 var msg = await webSocket.ReceiveMessageAsync(buff, token).ConfigureAwait(false);
@@ -106,7 +106,7 @@ namespace WebSocketExtensions
                     break;
                 }
                 msg.SetHandlers(strBeh, binBeh, webSocket);
-               
+
                 messageQueue.Push(msg);
             }
         }

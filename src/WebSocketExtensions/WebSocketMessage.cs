@@ -8,9 +8,10 @@ namespace WebSocketExtensions
     {
         public WebSocketMessage(byte[] data) { _bindata = data; BinDataLen = _bindata.Length; IsBinary = true; }
         public WebSocketMessage(string data) { StringData = data; }
-        public WebSocketMessage(Exception e)
+        public WebSocketMessage(string exceptionMessage, Exception e)
         {
             Exception = e;
+            ExceptionMessage = exceptionMessage;
         }
         public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc)
         {
@@ -34,16 +35,19 @@ namespace WebSocketExtensions
         }
         public void HandleMessage(Action<string> logError)
         {
-            if (IsBinary) {
+            if (IsBinary)
+            {
                 var args = new BinaryMessageReceivedEventArgs(GetBinData(), _ws);
                 BinaryBehavior(args);
-            }else if (StringData != null)
+            }
+            else if (StringData != null)
             {
                 var args = new StringMessageReceivedEventArgs(StringData, _ws);
                 StringBehavior(args);
-            }else  if (Exception != null)
+            }
+            else if (Exception != null)
             {
-                logError($"Exception in read thread {Exception}");
+                logError($"Exception in read thread:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
             }
         }
 
@@ -64,7 +68,7 @@ namespace WebSocketExtensions
                 return _bindata;
 
             return File.ReadAllBytes(_pagePath);
-            
+
         }
 
         public void Dispose()
@@ -72,12 +76,12 @@ namespace WebSocketExtensions
             if (!string.IsNullOrWhiteSpace(_pagePath))
                 File.Delete(_pagePath);
         }
-        public bool InMemory =>  _bindata != null;
+        public bool InMemory => _bindata != null;
         public string StringData { get; private set; }
         public WebSocketCloseStatus? WebSocketCloseStatus { get; private set; }
         public string CloseStatDesc { get; private set; }
         public bool IsDisconnect { get; private set; }
         public Exception Exception { private set; get; }
-        
+        public string ExceptionMessage { get; private set; }
     }
 }
