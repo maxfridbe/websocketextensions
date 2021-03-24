@@ -11,7 +11,7 @@ namespace ConsoleApp1
     {
         static void Main(string[] args)
         {
-            var server = new WebSocketServer((s, err) => Console.WriteLine(s));
+            var server = new HttpListenerWebSocketServer((s, err) => Console.WriteLine(s));
             server.AddRouteBehavior("/aaa", () => { return new test(); });
             server.StartAsync("http://localhost:8080/");
             Console.WriteLine("Press any key to exit...");
@@ -19,7 +19,7 @@ namespace ConsoleApp1
         }
     }
 
-    public class test : WebSocketServerBehavior
+    public class test : HttpListenerWebSocketServerBehavior
     {
         public override void OnBinaryMessage(BinaryMessageReceivedEventArgs e)
         {

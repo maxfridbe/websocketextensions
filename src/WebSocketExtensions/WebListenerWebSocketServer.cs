@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Net.Http.Server;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -13,73 +14,77 @@ namespace WebSocketExtensions
 {
 
     //## The Server class        
-    public class WebSocketServer : WebSocketReciever, IDisposable
+    public class WebListenerWebSocketServer : WebSocketReciever, IDisposable
     {
-        public WebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
+        public WebListenerWebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
         {
-            _behaviors = new ConcurrentDictionary<string, Func<WebSocketServerBehavior>>();
-            _clients = new ConcurrentDictionary<string, WebSocketContext>();
+            _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
+            _clients = new ConcurrentDictionary<string, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
         }
         private int count = 0;
-        private ConcurrentDictionary<string, Func<WebSocketServerBehavior>> _behaviors;
+        private ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>> _behaviors;
         private CancellationTokenSource _cts;
-        private HttpListener _httpListener;
+        private WebListener _webListener;
         private Task _listenTask;
-        private ConcurrentDictionary<string, WebSocketContext> _clients;
+        private ConcurrentDictionary<string, WebSocket> _clients;
         private PagingMessageQueue _messageQueue;
         private readonly long _queueThrottleLimit;
 
 
         public IList<string> GetActiveClientIds()
         {
-            return _clients.Where(c => c.Value.WebSocket.State == WebSocketState.Open).Select(c => c.Key).ToList();
+            return _clients.Where(c => c.Value.State == WebSocketState.Open).Select(c => c.Key).ToList();
         }
         public bool IsListening()
         {
-            if (_httpListener == null)
+            if (_webListener == null)
                 return false;
-            return _httpListener.IsListening;
+            return _webListener.IsListening;
         }
         public Task DisconnectClientById(string clientId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
         {
-            WebSocketContext ctx = null;
-            _clients.TryGetValue(clientId, out ctx);
-            return ctx.WebSocket.SendCloseAsync(status, description, CancellationToken.None);
+            WebSocket ws = null;
+            _clients.TryGetValue(clientId, out ws);
+            return ws.SendCloseAsync(status, description, CancellationToken.None);
         }
         public Task SendStreamAsync(string clientId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
-            WebSocketContext ctx = null;
-            _clients.TryGetValue(clientId, out ctx);
-            return ctx.WebSocket.SendStreamAsync(stream, dispose, tok);
+            WebSocket ws = null;
+            _clients.TryGetValue(clientId, out ws);
+            return ws.SendStreamAsync(stream, dispose, tok);
         }
         public Task SendBytesAsync(string clientId, byte[] data, CancellationToken tok = default(CancellationToken))
         {
-            WebSocketContext ctx = null;
-            _clients.TryGetValue(clientId, out ctx);
-            return ctx.WebSocket.SendBytesAsync(data, tok);
+            WebSocket ws = null;
+            _clients.TryGetValue(clientId, out ws);
+            return ws.SendBytesAsync(data, tok);
         }
 
         public Task SendStringAsync(string clientId, string data, CancellationToken tok = default(CancellationToken))
         {
-            WebSocketContext ctx = null;
-            _clients.TryGetValue(clientId, out ctx);
-            return ctx.WebSocket.SendStringAsync(data, tok);
+            WebSocket ws = null;
+            _clients.TryGetValue(clientId, out ws);
+            return ws.SendStringAsync(data, tok);
 
         }
-        public bool AddRouteBehavior<TBehavior>(string route, Func<TBehavior> p) where TBehavior : WebSocketServerBehavior
+        public bool AddRouteBehavior<TBehavior>(string route, Func<TBehavior> p) where TBehavior : WebListenerWebSocketServerBehavior
         {
             return _behaviors.TryAdd(route, p);
         }
         private void _stopListeningThread()
         {
-            if (_httpListener != null && _httpListener.IsListening)
-            {
-                _httpListener.Stop();
-            }
+            
             if (_cts != null)
             {
                 _cts.Cancel();
+                _cts.Dispose();
+                _cts = null;
+            }
+            if (_webListener != null && _webListener.IsListening)
+            {
+                _webListener.Dispose();
+                _webListener = null;
             }
 
             _clients.Clear();
@@ -94,13 +99,13 @@ namespace WebSocketExtensions
             var listenerThredStarted = new TaskCompletionSource<bool>();
 
             _cts = new CancellationTokenSource();
-            _httpListener = new HttpListener();
-            _httpListener.Prefixes.Add(listenerPrefix);
-            _httpListener.Start();
+            _webListener = new WebListener();
+            _webListener.Settings.UrlPrefixes.Add(listenerPrefix);
+            _webListener.Start();
             _logInfo($"Listener Started on {listenerPrefix}");
             _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _queueThrottleLimit);
 
-          
+
 
             _listenTask = Task.Run(async () =>
             {
@@ -113,8 +118,8 @@ namespace WebSocketExtensions
                     else
                     {
                         listenerThredStarted.TrySetResult(true);
-                        using (_httpListener)
-                            await ListenLoop(_httpListener, _cts.Token);
+                        using (_webListener)
+                            await ListenLoop(_webListener, _cts.Token);
                     }
                 }
                 catch (Exception e)
@@ -125,7 +130,7 @@ namespace WebSocketExtensions
 
             return listenerThredStarted.Task;
         }
-        private async Task ListenLoop(HttpListener listener, CancellationToken tok)
+        private async Task ListenLoop(WebListener listener, CancellationToken tok)
         {
             _logInfo($"Listening loop Started");
 
@@ -136,9 +141,20 @@ namespace WebSocketExtensions
                     if (!listener.IsListening || tok.IsCancellationRequested)
                         break;
 
-                    HttpListenerContext listenerContext = await listener.GetContextAsync().ConfigureAwait(false);
+                    var requestContext = await listener.AcceptAsync().ConfigureAwait(false);// listener.GetContextAsync().ConfigureAwait(false);
 
-                    _handleContext(listenerContext, tok);
+                    Func<WebListenerWebSocketServerBehavior> builder = null;
+                    if (!_behaviors.TryGetValue(requestContext.Request.RawUrl, out builder))
+                    {
+                        _logError($"There is no behavior defined for {requestContext.Request.RawUrl}");
+                        requestContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                        requestContext.Abort();
+                    }
+                    else
+                    {
+                        Task.Run(async () => await HandleClient(requestContext, builder, tok));
+                    }
+                    //_handleContext(listenerContext, tok);
                 }
                 catch (HttpListenerException listenerex)
                 {
@@ -157,28 +173,31 @@ namespace WebSocketExtensions
             _logInfo($"Listening loop Stopped");
 
         }
-        private void _handleContext(HttpListenerContext listenerContext, CancellationToken token)
-        {
-            if (listenerContext.Request.IsWebSocketRequest)
-            {
+        //private void _handleContext(RequestContext listenerContext, CancellationToken token)
+        //{
+        //    var ws = listenerContext.AcceptWebSocketAsync();
 
-                Func<WebSocketServerBehavior> builder = null;
-                if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
-                {
-                    _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
-                    listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
-                    listenerContext.Response.Close();
-                }
-                else
-                    Task.Run(async () => await HandleClient(listenerContext, builder, token));
-            }
-            else
-            {
-                _logError("Request recieved is not a websocket request");
-                listenerContext.Response.StatusCode = 400;
-                listenerContext.Response.Close();
-            }
-        }
+
+        //    if (listenerContext.Request.IsWebSocketRequest)
+        //    {
+
+        //        Func<WebSocketServerBehavior> builder = null;
+        //        if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
+        //        {
+        //            _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
+        //            listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+        //            listenerContext.Response.Close();
+        //        }
+        //        else
+        //            Task.Run(async () => await HandleClient(ws, builder, token));
+        //    }
+        //    else
+        //    {
+        //        _logError("Request recieved is not a websocket request");
+        //        listenerContext.Response.StatusCode = 400;
+        //        listenerContext.Response.Close();
+        //    }
+        //}
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {
 
@@ -198,31 +217,34 @@ namespace WebSocketExtensions
         }
 
 
-        private async Task HandleClient<TWebSocketBehavior>(HttpListenerContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
-            where TWebSocketBehavior : WebSocketServerBehavior
+        private async Task HandleClient<TWebSocketBehavior>(RequestContext requestContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
+            where TWebSocketBehavior : WebListenerWebSocketServerBehavior
         {
-            WebSocketContext webSocketContext = null;
-            WebSocketServerBehavior behavior = null;
+            WebSocket ws = null;
+            WebListenerWebSocketServerBehavior behavior = null;
             string clientId;
             try
             {
-                webSocketContext = await listenerContext.AcceptWebSocketAsync(subProtocol: null);
-                behavior = behaviorBuilder();
                 int statusCode = 500;
                 var statusDescription = "BadContext";
-                if (!behavior.OnValidateContext(webSocketContext, ref statusCode, ref statusDescription))
+                behavior = behaviorBuilder();
+
+                if (!behavior.OnValidateContext(requestContext, ref statusCode, ref statusDescription))
                 {
-                    listenerContext.Response.StatusDescription = statusDescription;
-                    listenerContext.Response.StatusCode = statusCode;
-                    listenerContext.Response.Close();
+                    requestContext.Response.ReasonPhrase = statusDescription;
+                    requestContext.Response.StatusCode = statusCode;
+                    requestContext.Abort();
 
                     _logError($"Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
 
                     return;
                 }
-                clientId = behavior.GetClientId(webSocketContext);
+                ws = await requestContext.AcceptWebSocketAsync();
 
-                _clients.TryAdd(clientId, webSocketContext);
+
+                clientId = behavior.GetClientId(requestContext);
+
+                _clients.TryAdd(clientId, ws);
                 Interlocked.Increment(ref count);
                 _logInfo($"Client id:{clientId} accepted now there are {count} clients");
                 var safeconnected = MakeSafe<string>(behavior.OnClientConnected, "behavior.OnClientConnected");
@@ -230,8 +252,8 @@ namespace WebSocketExtensions
             }
             catch (Exception e)
             {
-                listenerContext.Response.StatusCode = 500;
-                listenerContext.Response.Close();
+                requestContext.Response.StatusCode = 500;
+                requestContext.Abort();//.Response.Close();
 
                 _logError($"Exception: {e}");
                 return;
@@ -239,13 +261,13 @@ namespace WebSocketExtensions
 
             try
             {
-                using (webSocketContext.WebSocket)
+                using (ws)
                 {
                     var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(clientId, r)), "behavior.OnClose");
                     var strBeh = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binBeh = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
 
-                    await webSocketContext.WebSocket.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, token);
+                    await ws.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, token);
                 }
 
             }
@@ -254,11 +276,11 @@ namespace WebSocketExtensions
                 Interlocked.Decrement(ref count);
                 this._logInfo($"Client {clientId ?? "_unidentified_"} disconnected. now {count} connected clients");
 
-                webSocketContext?.WebSocket.CleanupSendMutex();
+                ws?.CleanupSendMutex();
 
                 if (!string.IsNullOrEmpty(clientId))
                 {
-                    _clients.TryRemove(clientId, out webSocketContext);
+                    _clients.TryRemove(clientId, out ws);
 
                 }
                 _logInfo($"Completed Receive Loop for clientid {clientId ?? "_unidentified_"}");
@@ -266,10 +288,15 @@ namespace WebSocketExtensions
             }
         }
 
+        bool _isdisposing = false;
         public void Dispose()
         {
-            _stopListeningThread();
-            _messageQueue?.CompleteAdding();
+            if (!_isdisposing)
+            {
+                _isdisposing = true;
+                _stopListeningThread();
+                _messageQueue?.CompleteAdding();
+            }
         }
     }
 }

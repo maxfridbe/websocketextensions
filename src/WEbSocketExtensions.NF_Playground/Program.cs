@@ -10,7 +10,7 @@ using WebSocketExtensions;
 
 namespace WEbSocketExtensions.NF_Playground
 {
-    public class testBeh : WebSocketServerBehavior
+    public class testBeh : HttpListenerWebSocketServerBehavior
     {
         public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
@@ -48,7 +48,7 @@ namespace WEbSocketExtensions.NF_Playground
                 //Console.WriteLine("Press any key to exit...");
                 //Console.ReadKey();
                 //arrange
-                var server = new WebSocketServer();
+                var server = new HttpListenerWebSocketServer();
                 var port = _FreeTcpPort();
 
                 var beh = new testBeh()

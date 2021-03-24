@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Net.Http.Server;
+using System;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -7,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-    public abstract class WebSocketServerBehavior
+    public abstract class HttpListenerWebSocketServerBehavior
     {
       
         public DateTime StartTime { get; } = DateTime.UtcNow;
