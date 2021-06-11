@@ -47,6 +47,9 @@ namespace WebSocketExtensions
             }
             else if (Exception != null)
             {
+                if (Exception is OperationCanceledException)
+                    return;
+
                 logError($"Exception in read thread:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
             }
         }
@@ -75,6 +78,11 @@ namespace WebSocketExtensions
         {
             if (!string.IsNullOrWhiteSpace(_pagePath))
                 File.Delete(_pagePath);
+            _bindata = null;
+            _ws = null;
+            StringBehavior = null;
+            BinaryBehavior = null;
+
         }
         public bool InMemory => _bindata != null;
         public string StringData { get; private set; }

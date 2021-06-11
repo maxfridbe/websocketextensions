@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -77,6 +78,7 @@ namespace WebSocketExtensions.Tests
         {
             public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
             public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
+            public Action<WebSocketClosedEventArgs> ClosedHandler = (_) => { };
 
             public override void OnStringMessage(StringMessageReceivedEventArgs e)
             {
@@ -86,6 +88,11 @@ namespace WebSocketExtensions.Tests
             {
                 BinaryMessageHandler(e);
             }
+            public override void OnClose(WebSocketClosedEventArgs e)
+            {
+                ClosedHandler(e);
+            }
+            
         }
 
         [Fact]
@@ -195,7 +202,7 @@ namespace WebSocketExtensions.Tests
             await Task.Delay(100);
             //asssert
             Assert.True(closed);
-
+            client.Dispose();
         }
 
 
@@ -234,6 +241,133 @@ namespace WebSocketExtensions.Tests
             //asssert
             Assert.True(closed);
 
+        }
+
+
+
+        [Fact]
+        public async Task TestServer_ClientDisconnect()
+        {
+            //arrange
+            var server = new WebListenerWebSocketServer();
+            var port = _FreeTcpPort();
+            bool disconnected = false;
+            var beh = new testBeh()
+            {
+                ClosedHandler = (e) => {
+                    disconnected = true;
+
+                }
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            var closed = false;
+            var client = new WebSocketClient()
+            {
+                CloseHandler = (c) =>
+                    closed = true
+            };
+            await client.ConnectAsync("ws" + u + "aaa");
+
+            //act
+
+            await Task.Delay(100);
+
+            client.Dispose();
+            await Task.Delay(100);
+
+            Assert.True(disconnected);
+
+            server.Dispose();
+            await Task.Delay(100);
+            //asssert
+            Assert.True(closed);
+
+        }
+
+
+
+
+
+
+        [Fact]
+        public async Task TestMemLeak()
+        {
+
+            //arrange
+            //var server = new HttpListenerWebSocketServer();
+            var server = new WebListenerWebSocketServer();
+            var port = _FreeTcpPort();
+
+            //var beh = new testBeh()
+            //{
+            //};
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) =>
+            {
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        //await Task.Delay(100);
+                        await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
+                    }
+                    catch { }
+                });
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        //await Task.Delay(100);
+                        await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
+                    }
+                    catch { }
+                });
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            List<long> memu = new List<long>();
+            for (var i = 0; i < 3000; i++)
+            {
+                string res = null;
+                using (var client = new WebSocketClient())
+                {
+                    client.MessageHandler = (e) => res = e.Data;
+                    await client.ConnectAsync($"ws://localhost:{port}/aaa");
+                    Console.WriteLine($"Connect {i}");
+                    await client.SendStringAsync("hi" + i.ToString(), CancellationToken.None);
+                    Console.WriteLine($"Disconnect {i}");
+                }
+
+                if (i % 300 == 0)
+                {
+                    GC.Collect();
+                    memu.Add(getmem());
+                }
+            }
+
+            var centroid = memu[memu.Count / 2];
+            var last = memu.Last();
+            var diff = last - centroid;
+            var per = (diff / (float)centroid) * 100;
+            Assert.True(per < 5);
+        }
+
+
+
+
+        private static long getmem()
+        {
+            long totalsize = 0;
+            foreach (var aProc in Process.GetProcesses())
+                totalsize += aProc.WorkingSet64 / 1024l;
+            return totalsize;
         }
 
 

@@ -32,8 +32,14 @@ namespace WebSocketExtensions
                 }
 
             }
-             ss.Wait();
-            //return Task.FromResult(true);
+            try
+            {
+                ss.Wait();
+            }
+            catch (ArgumentNullException e)
+            {
+                //disposed of while wait
+            }
 
         }
         public Task EnterLockAsync(object resource, CancellationToken ct)
@@ -63,7 +69,8 @@ namespace WebSocketExtensions
             {
                 if (_lockers.ContainsKey(resource))
                 {
-                    _lockers[resource].Dispose();
+                    var ss = _lockers[resource];
+                    ss.Dispose();
                     _lockers.Remove(resource);
                 }
             }//lock
@@ -83,9 +90,20 @@ namespace WebSocketExtensions
             if (ss == null)
                 return false;
 
-            ss?.Release();
+            if(ss.CurrentCount != 1)
+                ss?.Release();
+
             return true;
 
         }
+
+        //not used, is static
+        //public void Dispose()
+        //{
+        //    foreach(var l in _lockers)
+        //    {
+        //        l.Value.Dispose();
+        //    }
+        //}
     }
 }

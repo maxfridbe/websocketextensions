@@ -10,6 +10,20 @@ using WebSocketExtensions;
 
 namespace WEbSocketExtensions.NF_Playground
 {
+    public class testweblisternerBehavior : WebListenerWebSocketServerBehavior
+    {
+        public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
+        public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
+
+        public override void OnStringMessage(StringMessageReceivedEventArgs e)
+        {
+            StringMessageHandler(e);
+        }
+        public override void OnBinaryMessage(BinaryMessageReceivedEventArgs e)
+        {
+            BinaryMessageHandler(e);
+        }
+    }
     public class testBeh : HttpListenerWebSocketServerBehavior
     {
         public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
@@ -40,68 +54,128 @@ namespace WEbSocketExtensions.NF_Playground
 
         static void Main(string[] args)
         {
-            Task.Run(async () =>
+            Task.Run(async () => await testDisconnects()).GetAwaiter().GetResult();
+            //Task.Run(async () =>
+            //{
+            //    //var server = new WebSocketServer((s, err) => Console.WriteLine(s));
+            //    //server.AddRouteBehavior("/aaa", () => { return new test(); });
+            //    //server.StartAsync("http://localhost:8080/");
+            //    //Console.WriteLine("Press any key to exit...");
+            //    //Console.ReadKey();
+            //    //arrange
+            //    var server = new HttpListenerWebSocketServer();
+            //    var port = _FreeTcpPort();
+
+            //    var beh = new testBeh()
+            //    {
+            //    };
+            //    beh.StringMessageHandler = (e) =>
+            //    {
+            //        //try
+            //        //{
+            //        var data = e.Data;
+            //        Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+            //        Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+            //        //await Task.Delay(1000);
+            //        //}
+            //        //catch (Exception o)
+            //        //{
+
+            //        //}
+
+            //    };
+
+            //    server.AddRouteBehavior("/aaa", () => beh);
+            //    await server.StartAsync($"http://localhost:{port}/");
+
+            //    string res = null;
+            //    var client = new WebSocketClient()
+            //    {
+            //        MessageHandler = (e) => res = e.Data,
+            //    };
+
+            //    await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //    //act
+            //    var tasks = new List<Task>();
+            //    for (var i = 0; i < 200; i++)
+            //    {
+            //        tasks.Add(Task.Run(() =>
+            //        {
+            //            // try
+            //            // {
+            //            client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
+            //            //  }
+            //            //  catch (Exception e) {
+            //            //  }
+            //        }));
+
+            //    }
+            //    await Task.WhenAll(tasks);
+            //    await Task.Delay(100);
+
+
+
+            //}).GetAwaiter().GetResult();
+
+
+        }
+
+        private static async Task testDisconnects()
+        {
+
+            //arrange
+            //var server = new HttpListenerWebSocketServer();
+            var server = new WebListenerWebSocketServer();
+            var port = _FreeTcpPort();
+
+            //var beh = new testBeh()
+            //{
+            //};
+            var beh = new testweblisternerBehavior()
             {
-                //var server = new WebSocketServer((s, err) => Console.WriteLine(s));
-                //server.AddRouteBehavior("/aaa", () => { return new test(); });
-                //server.StartAsync("http://localhost:8080/");
-                //Console.WriteLine("Press any key to exit...");
-                //Console.ReadKey();
-                //arrange
-                var server = new HttpListenerWebSocketServer();
-                var port = _FreeTcpPort();
-
-                var beh = new testBeh()
+            };
+            beh.StringMessageHandler = (e) =>
+            {
+                Task.Run( async () =>
                 {
-                };
-                beh.StringMessageHandler = (e) =>
+                    try {
+                        //await Task.Delay(100);
+                       await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None); 
+                    }
+                    catch { }
+                });
+                Task.Run(async () =>
                 {
-                    //try
-                    //{
-                    var data = e.Data;
-                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
-                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
-                    //await Task.Delay(1000);
-                    //}
-                    //catch (Exception o)
-                    //{
+                    try {
+                        //await Task.Delay(100);
+                        await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
+                    }
+                    catch { }
+                });
+            };
 
-                    //}
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
 
-                };
-
-                server.AddRouteBehavior("/aaa", () => beh);
-                await server.StartAsync($"http://localhost:{port}/");
-
+            for (var i = 0; i < 3000; i++)
+            {
                 string res = null;
-                var client = new WebSocketClient()
+                using (var client = new WebSocketClient())
                 {
-                    MessageHandler = (e) => res = e.Data,
-                };
-
-                await client.ConnectAsync($"ws://localhost:{port}/aaa");
-
-                //act
-                var tasks = new List<Task>();
-                for (var i = 0; i < 200; i++)
-                {
-                    tasks.Add(Task.Run(() =>
-                    {
-                        // try
-                        // {
-                        client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
-                        //  }
-                        //  catch (Exception e) {
-                        //  }
-                    }));
-
+                    client.MessageHandler = (e) => res = e.Data;
+                    await client.ConnectAsync($"ws://localhost:{port}/aaa");
+                    Console.WriteLine($"Connect {i}");
+                    await client.SendStringAsync("hi" + i.ToString(), CancellationToken.None);
+                    Console.WriteLine($"Disconnect {i}");
                 }
-                await Task.WhenAll(tasks);
-                await Task.Delay(100);
 
+                if (i % 300 == 0)
+                {
+                    GC.Collect();
+                }
+            }
 
-
-            }).GetAwaiter().GetResult();
 
 
         }

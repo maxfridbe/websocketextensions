@@ -76,6 +76,7 @@ namespace WebSocketExtensions
             if (_httpListener != null && _httpListener.IsListening)
             {
                 _httpListener.Stop();
+
             }
             if (_cts != null)
             {
@@ -100,7 +101,7 @@ namespace WebSocketExtensions
             _logInfo($"Listener Started on {listenerPrefix}");
             _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _queueThrottleLimit);
 
-          
+
 
             _listenTask = Task.Run(async () =>
             {
@@ -241,7 +242,13 @@ namespace WebSocketExtensions
             {
                 using (webSocketContext.WebSocket)
                 {
-                    var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(clientId, r)), "behavior.OnClose");
+                    var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) =>
+                    {
+                        behavior.OnClose(new WebSocketClosedEventArgs(clientId, r));
+                        
+                        //clean ?
+
+                    }, "behavior.OnClose");
                     var strBeh = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binBeh = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
 
@@ -260,7 +267,9 @@ namespace WebSocketExtensions
                 {
                     _clients.TryRemove(clientId, out webSocketContext);
 
+
                 }
+                
                 _logInfo($"Completed Receive Loop for clientid {clientId ?? "_unidentified_"}");
 
             }

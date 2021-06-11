@@ -24,6 +24,13 @@ namespace WebSocketExtensions
         }
         public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
+            if (ws.State != WebSocketState.Open)
+            {
+                ws.CleanupSendMutex();
+                throw new Exception("Websocket not open");
+            }
+
+
             _locker.EnterLock(ws);
             try
             {
@@ -79,6 +86,13 @@ namespace WebSocketExtensions
 
         public static Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
         {
+            if (ws.State != WebSocketState.Open)
+            {
+                ws.CleanupSendMutex();
+                return Task.FromException(new Exception("Websocket not open"));
+
+            }
+
             _locker.EnterLock(ws);
 
             try
@@ -94,6 +108,12 @@ namespace WebSocketExtensions
 
         public static Task SendStringAsync(this WebSocket ws, string data, CancellationToken tok = default(CancellationToken))
         {
+            if (ws.State != WebSocketState.Open)
+            {
+                ws.CleanupSendMutex();
+                return Task.FromException(new Exception("Websocket not open"));
+            }
+
             _locker.EnterLock(ws);
             try
             {

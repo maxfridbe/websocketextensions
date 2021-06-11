@@ -15,7 +15,7 @@ namespace WebSocketExtensions
     {
 
         public async static Task<WebSocketMessage> ReceiveMessageAsync(this WebSocket webSocket,
-                                        byte[] buff,
+                                        ArraySegment<byte> buff,
                                         CancellationToken token = default(CancellationToken))
         {
 
@@ -26,12 +26,13 @@ namespace WebSocketExtensions
                 {
                     while (webSocket.State == WebSocketState.Open)
                     {
-                        var receivedResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buff), token).ConfigureAwait(false);
-
+                        var receivedResult = await webSocket.ReceiveAsync(buff, token).ConfigureAwait(false);
+                        
                         if (receivedResult.MessageType == WebSocketMessageType.Binary
                             || receivedResult.MessageType == WebSocketMessageType.Text)
                         {
-                            ms.Write(buff, 0, receivedResult.Count);
+                            
+                            ms.Write(buff.Array, 0, receivedResult.Count);
                             if (receivedResult.EndOfMessage)
                             {
                                 byte[] arr = ms.ToArray();
@@ -65,6 +66,7 @@ namespace WebSocketExtensions
                 }
 
             }
+         
             catch (WebSocketException ex)
             {
                 switch (ex.WebSocketErrorCode)
@@ -77,6 +79,13 @@ namespace WebSocketExtensions
             }
             catch (Exception e)
             {
+                if (token.IsCancellationRequested)
+                {
+                    if (webSocket.State == WebSocketState.Open) 
+                        await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Thread requested disconnect", token);
+                    return new WebSocketMessage(status: WebSocketCloseStatus.EndpointUnavailable, closeStatDesc: "Closing due to CancellationToken abort");
+                }
+
                 return new WebSocketMessage("Non WebSocketException", e);
 
             }
@@ -95,9 +104,11 @@ namespace WebSocketExtensions
         {
             var buff = new byte[1048576];
 
+
+            var s = new ArraySegment<byte>(buff);
             while (!token.IsCancellationRequested)
             {
-                var msg = await webSocket.ReceiveMessageAsync(buff, token).ConfigureAwait(false);
+                var msg = await webSocket.ReceiveMessageAsync(s, token).ConfigureAwait(false);
 
                 if (msg.IsDisconnect)
                 {
@@ -109,6 +120,7 @@ namespace WebSocketExtensions
 
                 messageQueue.Push(msg);
             }
+
         }
 
     }

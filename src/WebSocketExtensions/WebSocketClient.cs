@@ -18,6 +18,7 @@ namespace WebSocketExtensions
         private Task _tsk;
         private long _recieveQueueLimitBytes = long.MaxValue;
         CancellationTokenSource _cts = new CancellationTokenSource();
+        private Action<WebSocketReceivedResultEventArgs> _closeBeh;
         private PagingMessageQueue _messageQueue;
         public Action<StringMessageReceivedEventArgs> MessageHandler { get; set; } = (e) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryHandler { get; set; } = (e) => { };
@@ -32,12 +33,12 @@ namespace WebSocketExtensions
 
             var binBeh = MakeSafe(BinaryHandler, "BinaryHandler");
             var strBeh = MakeSafe(MessageHandler, "MessageHandler");
-            var closeBeh = MakeSafe(CloseHandler, "CloseHandler");
-            
+            _closeBeh = MakeSafe(CloseHandler, "CloseHandler");
+
             _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
-            
-            _tsk = _client.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, null, tok);
-           
+
+            _tsk = _client.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, _closeBeh, _logError, _logInfo, null, _cts.Token);
+
         }
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {
@@ -55,26 +56,7 @@ namespace WebSocketExtensions
             });
 
         }
-        public void Dispose()
-        {
-            if (_client.State == WebSocketState.Open)
-            {
-                try
-                {
-                    _client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client Closing", CancellationToken.None).GetAwaiter().GetResult();
-                }
-                catch (Exception e)
-                {
-                    _logError($"Trying to close connection in dispose exception {e}");
-                }
-            }
 
-            _client.CleanupSendMutex();
-
-            _cts.Cancel();
-            if (_tsk != null)
-                _tsk.GetAwaiter().GetResult();
-        }
 
         public Task SendStringAsync(string data, CancellationToken tok = default(CancellationToken))
         {
@@ -90,6 +72,46 @@ namespace WebSocketExtensions
         public Task SendStreamAsync(Stream data, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
             return _client.SendStreamAsync(data, dispose, tok);
+
+        }
+
+        private bool disposing = false;
+
+        public void Dispose()
+        {
+            if (disposing)
+                return;
+
+            disposing = true;
+
+            if (_client.State == WebSocketState.Open)
+            {
+                try
+                {
+                    _client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Client Closing", CancellationToken.None).GetAwaiter().GetResult();
+                    // _client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client Closing", CancellationToken.None).GetAwaiter().GetResult();
+
+                }
+                catch (Exception e)
+                {
+                    if (_client.State != WebSocketState.Aborted)
+                        _logError($"Trying to close connection in dispose exception {e} {e.StackTrace}");
+                }
+                _closeBeh(new WebSocketReceivedResultEventArgs(WebSocketCloseStatus.NormalClosure, "Closed because disposing"));
+
+            }
+
+            _client.CleanupSendMutex();
+
+            _cts.Cancel();
+            _cts.Dispose();
+            if (_tsk != null)
+            {
+                _tsk.GetAwaiter().GetResult();
+                _messageQueue.CompleteAdding();
+            }
+            _client.Dispose();
+
 
         }
     }

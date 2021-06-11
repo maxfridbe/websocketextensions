@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -108,6 +109,89 @@ namespace WebSocketExtensions.Tests
         }
 
 
+
+
+
+        [Fact]
+        public async Task TestMemLeak()
+        {
+
+            //arrange
+            var server = new HttpListenerWebSocketServer();
+            //var server = new WebListenerWebSocketServer();
+            var port = _FreeTcpPort();
+
+            //var beh = new testBeh()
+            //{
+            //};
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) =>
+            {
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        //await Task.Delay(100);
+                        await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
+                    }
+                    catch { }
+                });
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        //await Task.Delay(100);
+                        await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
+                    }
+                    catch { }
+                });
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            List<long> memu = new List<long>();
+            for (var i = 0; i < 3000; i++)
+            {
+                string res = null;
+                using (var client = new WebSocketClient())
+                {
+                    client.MessageHandler = (e) => res = e.Data;
+                    await client.ConnectAsync($"ws://localhost:{port}/aaa");
+                    Console.WriteLine($"Connect {i}");
+                    await client.SendStringAsync("hi" + i.ToString(), CancellationToken.None);
+                    Console.WriteLine($"Disconnect {i}");
+                }
+
+                if (i % 300 == 0)
+                {
+                    GC.Collect();
+                   memu.Add( getmem());
+                }
+            }
+
+            var centroid = memu[memu.Count / 2];
+            var last = memu.Last();
+            var diff = last - centroid;
+            var per = (diff / (float)centroid) * 100;
+            Assert.True(per < 5);
+          //  File.WriteAllText("out.txt", $"{per}");
+
+        }
+
+
+
+
+        private static long getmem()
+        {
+            long totalsize = 0;
+            foreach (var aProc in Process.GetProcesses())
+                totalsize += aProc.WorkingSet64 / 1024l;
+            return totalsize;
+        }
+
         [Fact]
         public async Task TestCreateServer_connect_recv_text()
         {
@@ -195,6 +279,7 @@ namespace WebSocketExtensions.Tests
             await Task.Delay(100);
             //asssert
             Assert.True(closed);
+            client.Dispose();
 
         }
 
@@ -314,7 +399,7 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        public async Task TestCreateServerClient_connect_recv_echo_twice ()
+        public async Task TestCreateServerClient_connect_recv_echo_twice()
         {
             //arrange
             var server = new HttpListenerWebSocketServer();
@@ -327,10 +412,10 @@ namespace WebSocketExtensions.Tests
             {
                 //try
                 //{
-                    var data = e.Data;
-                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
-                    Task.Run(() => e.WebSocket.SendStringAsync(data +  data, CancellationToken.None).GetAwaiter().GetResult());
-                    //await Task.Delay(1000);
+                var data = e.Data;
+                Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                //await Task.Delay(1000);
                 //}
                 //catch (Exception o)
                 //{
@@ -356,12 +441,12 @@ namespace WebSocketExtensions.Tests
             {
                 tasks.Add(Task.Run(() =>
                 {
-                   // try
-                   // {
-                        client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
-                  //  }
-                  //  catch (Exception e) {
-                  //  }
+                    // try
+                    // {
+                    client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
+                    //  }
+                    //  catch (Exception e) {
+                    //  }
                 }));
 
             }
@@ -370,7 +455,7 @@ namespace WebSocketExtensions.Tests
 
             //assert
             //Assert.Equal("hi", t1.res);
-            
+
         }
 
 
@@ -482,21 +567,23 @@ namespace WebSocketExtensions.Tests
             {
             };
             bool exceptionoccured = false;
-            beh.StringMessageHandler = (e) => {
+            beh.StringMessageHandler = (e) =>
+            {
                 if (exceptionoccured)
                 {
                     e.WebSocket.SendStringAsync("hihi");
                     return;
                 }
                 exceptionoccured = true;
-                throw new Exception("arghhh"); };
+                throw new Exception("arghhh");
+            };
 
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync($"http://localhost:{port}/");
 
             var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
-            
+
             //act
             await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
 

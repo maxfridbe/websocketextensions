@@ -154,7 +154,6 @@ namespace WebSocketExtensions
                     {
                         Task.Run(async () => await HandleClient(requestContext, builder, tok));
                     }
-                    //_handleContext(listenerContext, tok);
                 }
                 catch (HttpListenerException listenerex)
                 {
@@ -173,31 +172,7 @@ namespace WebSocketExtensions
             _logInfo($"Listening loop Stopped");
 
         }
-        //private void _handleContext(RequestContext listenerContext, CancellationToken token)
-        //{
-        //    var ws = listenerContext.AcceptWebSocketAsync();
-
-
-        //    if (listenerContext.Request.IsWebSocketRequest)
-        //    {
-
-        //        Func<WebSocketServerBehavior> builder = null;
-        //        if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
-        //        {
-        //            _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
-        //            listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
-        //            listenerContext.Response.Close();
-        //        }
-        //        else
-        //            Task.Run(async () => await HandleClient(ws, builder, token));
-        //    }
-        //    else
-        //    {
-        //        _logError("Request recieved is not a websocket request");
-        //        listenerContext.Response.StatusCode = 400;
-        //        listenerContext.Response.Close();
-        //    }
-        //}
+      
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {
 
@@ -209,7 +184,7 @@ namespace WebSocketExtensions
                 }
                 catch (Exception e)
                 {
-                    _logError($"Error in handler {handlerName} {e}");
+                    _logError($"WebListenerWebSocketServer: Error in handler {handlerName} \r\n {e} \r\n {e.StackTrace}");
                 }
 
             });
@@ -254,8 +229,9 @@ namespace WebSocketExtensions
             {
                 requestContext.Response.StatusCode = 500;
                 requestContext.Abort();//.Response.Close();
-
+                
                 _logError($"Exception: {e}");
+                requestContext.Dispose();
                 return;
             }
 
@@ -275,9 +251,9 @@ namespace WebSocketExtensions
             {
                 Interlocked.Decrement(ref count);
                 this._logInfo($"Client {clientId ?? "_unidentified_"} disconnected. now {count} connected clients");
-
+               
                 ws?.CleanupSendMutex();
-
+                requestContext.Dispose();
                 if (!string.IsNullOrEmpty(clientId))
                 {
                     _clients.TryRemove(clientId, out ws);
