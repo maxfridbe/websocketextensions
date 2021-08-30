@@ -25,10 +25,7 @@ namespace WebSocketExtensions
         }
         public Action<StringMessageReceivedEventArgs> StringBehavior { get; private set; }
         public Action<BinaryMessageReceivedEventArgs> BinaryBehavior { get; private set; }
-
-        private WebSocket _ws;
-
-       
+              
        
 
         public void PageBinData()
@@ -57,7 +54,6 @@ namespace WebSocketExtensions
             if (!string.IsNullOrWhiteSpace(_pagePath))
                 File.Delete(_pagePath);
             _bindata = null;
-            _ws = null;
             StringBehavior = null;
             BinaryBehavior = null;
 
