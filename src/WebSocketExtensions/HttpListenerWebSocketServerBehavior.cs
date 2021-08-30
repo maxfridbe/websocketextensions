@@ -23,7 +23,7 @@ namespace WebSocketExtensions
         public virtual void OnError(ErrorEventArgs e) { }
         public virtual void OnStringMessage(StringMessageReceivedEventArgs e) { }
         public virtual void OnBinaryMessage(BinaryMessageReceivedEventArgs e) { }
-        public virtual void OnClientConnected(string clientId) { }
+        public virtual void OnClientConnected(string clientId, Guid connectionId) { }
 
     }
 }

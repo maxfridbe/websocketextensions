@@ -19,7 +19,7 @@ namespace WebSocketExtensions
         public WebListenerWebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
-            _clients = new ConcurrentDictionary<string, WebSocket>();
+            _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
         }
         private int count = 0;
@@ -27,12 +27,12 @@ namespace WebSocketExtensions
         private CancellationTokenSource _cts;
         private WebListener _webListener;
         private Task _listenTask;
-        private ConcurrentDictionary<string, WebSocket> _clients;
+        private ConcurrentDictionary<Guid, WebSocket> _clients;
         private PagingMessageQueue _messageQueue;
         private readonly long _queueThrottleLimit;
 
 
-        public IList<string> GetActiveClientIds()
+        public IList<Guid> GetActiveClientIds()
         {
             return _clients.Where(c => c.Value.State == WebSocketState.Open).Select(c => c.Key).ToList();
         }
@@ -42,29 +42,29 @@ namespace WebSocketExtensions
                 return false;
             return _webListener.IsListening;
         }
-        public Task DisconnectClientById(string clientId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
+        public Task DisconnectClientById(Guid connectionid, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
         {
             WebSocket ws = null;
-            _clients.TryGetValue(clientId, out ws);
+            _clients.TryGetValue(connectionid, out ws);
             return ws.SendCloseAsync(status, description, CancellationToken.None);
         }
-        public Task SendStreamAsync(string clientId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Guid connectionid, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(clientId, out ws);
+            _clients.TryGetValue(connectionid, out ws);
             return ws.SendStreamAsync(stream, dispose, tok);
         }
-        public Task SendBytesAsync(string clientId, byte[] data, CancellationToken tok = default(CancellationToken))
+        public Task SendBytesAsync(Guid connectionid, byte[] data, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(clientId, out ws);
+            _clients.TryGetValue(connectionid, out ws);
             return ws.SendBytesAsync(data, tok);
         }
 
-        public Task SendStringAsync(string clientId, string data, CancellationToken tok = default(CancellationToken))
+        public Task SendStringAsync(Guid connectionid, string data, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(clientId, out ws);
+            _clients.TryGetValue(connectionid, out ws);
             return ws.SendStringAsync(data, tok);
 
         }
@@ -74,7 +74,7 @@ namespace WebSocketExtensions
         }
         private void _stopListeningThread()
         {
-            
+
             if (_cts != null)
             {
                 _cts.Cancel();
@@ -103,7 +103,7 @@ namespace WebSocketExtensions
             _webListener.Settings.UrlPrefixes.Add(listenerPrefix);
             _webListener.Start();
             _logInfo($"Listener Started on {listenerPrefix}");
-            _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _queueThrottleLimit);
+            _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _logInfo, _queueThrottleLimit);
 
 
 
@@ -172,7 +172,7 @@ namespace WebSocketExtensions
             _logInfo($"Listening loop Stopped");
 
         }
-      
+
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
         {
 
@@ -191,6 +191,23 @@ namespace WebSocketExtensions
 
         }
 
+        public Action<T, T2> MakeSafe<T, T2>(Action<T, T2> torun, string handlerName)
+        {
+
+            return new Action<T, T2>((T data, T2 data2) =>
+            {
+                try
+                {
+                    torun(data, data2);
+                }
+                catch (Exception e)
+                {
+                    _logError($"Error in handler {handlerName} {e}");
+                }
+
+            });
+
+        }
 
         private async Task HandleClient<TWebSocketBehavior>(RequestContext requestContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
             where TWebSocketBehavior : WebListenerWebSocketServerBehavior
@@ -198,6 +215,7 @@ namespace WebSocketExtensions
             WebSocket ws = null;
             WebListenerWebSocketServerBehavior behavior = null;
             string clientId;
+            Guid connectionId;
             try
             {
                 int statusCode = 500;
@@ -216,20 +234,20 @@ namespace WebSocketExtensions
                 }
                 ws = await requestContext.AcceptWebSocketAsync();
 
-
+                connectionId = Guid.NewGuid();
                 clientId = behavior.GetClientId(requestContext);
 
-                _clients.TryAdd(clientId, ws);
+                _clients.TryAdd(connectionId, ws);
                 Interlocked.Increment(ref count);
                 _logInfo($"Client id:{clientId} accepted now there are {count} clients");
-                var safeconnected = MakeSafe<string>(behavior.OnClientConnected, "behavior.OnClientConnected");
-                safeconnected(clientId);
+                var safeconnected = MakeSafe<string, Guid>(behavior.OnClientConnected, "behavior.OnClientConnected");
+                safeconnected(clientId, connectionId);
             }
             catch (Exception e)
             {
                 requestContext.Response.StatusCode = 500;
                 requestContext.Abort();//.Response.Close();
-                
+
                 _logError($"Exception: {e}");
                 requestContext.Dispose();
                 return;
@@ -239,11 +257,13 @@ namespace WebSocketExtensions
             {
                 using (ws)
                 {
-                    var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(clientId, r)), "behavior.OnClose");
+                    var closeBeh = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r)), "behavior.OnClose");
                     var strBeh = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binBeh = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
 
-                    await ws.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, closeBeh, _logError, _logInfo, clientId, token);
+                    _messageQueue.SetMessageHandler(strBeh, binBeh, closeBeh, ws);
+
+                    await ws.ProcessIncomingMessages(_messageQueue, connectionId, token);
                 }
 
             }
@@ -251,15 +271,14 @@ namespace WebSocketExtensions
             {
                 Interlocked.Decrement(ref count);
                 this._logInfo($"Client {clientId ?? "_unidentified_"} disconnected. now {count} connected clients");
-               
+
                 ws?.CleanupSendMutex();
                 requestContext.Dispose();
-                if (!string.IsNullOrEmpty(clientId))
-                {
-                    _clients.TryRemove(clientId, out ws);
 
-                }
-                _logInfo($"Completed Receive Loop for clientid {clientId ?? "_unidentified_"}");
+                _clients.TryRemove(connectionId, out ws);
+
+
+                _logInfo($"Completed Receive Loop for clientid {clientId ?? "_unidentified_"} connectionid {connectionId}");
 
             }
         }

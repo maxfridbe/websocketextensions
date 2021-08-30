@@ -6,17 +6,21 @@ namespace WebSocketExtensions
 {
     public class WebSocketMessage : IDisposable
     {
-        public WebSocketMessage(byte[] data) { _bindata = data; BinDataLen = _bindata.Length; IsBinary = true; }
-        public WebSocketMessage(string data) { StringData = data; }
-        public WebSocketMessage(string exceptionMessage, Exception e)
+        public WebSocketMessage(byte[] data, Guid connectionId) { _bindata = data; ConnectionId = connectionId; BinDataLen = _bindata.Length; IsBinary = true; }
+        public WebSocketMessage(string data, Guid connectionId) { StringData = data;
+            ConnectionId = connectionId;
+        }
+        public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId)
         {
             Exception = e;
+            ConnectionId = connectionId;
             ExceptionMessage = exceptionMessage;
         }
-        public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc)
+        public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc, Guid connectionId)
         {
             WebSocketCloseStatus = status;
             CloseStatDesc = closeStatDesc;
+            ConnectionId = connectionId;
             IsDisconnect = true;
         }
         public Action<StringMessageReceivedEventArgs> StringBehavior { get; private set; }
@@ -24,35 +28,8 @@ namespace WebSocketExtensions
 
         private WebSocket _ws;
 
-        public void SetHandlers(
-            Action<StringMessageReceivedEventArgs> strBeh
-           , Action<BinaryMessageReceivedEventArgs> binBeh
-            , WebSocket ws)
-        {
-            StringBehavior = strBeh;
-            BinaryBehavior = binBeh;
-            _ws = ws;
-        }
-        public void HandleMessage(Action<string> logError)
-        {
-            if (IsBinary)
-            {
-                var args = new BinaryMessageReceivedEventArgs(GetBinData(), _ws);
-                BinaryBehavior(args);
-            }
-            else if (StringData != null)
-            {
-                var args = new StringMessageReceivedEventArgs(StringData, _ws);
-                StringBehavior(args);
-            }
-            else if (Exception != null)
-            {
-                if (Exception is OperationCanceledException)
-                    return;
-
-                logError($"Exception in read thread:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
-            }
-        }
+       
+       
 
         public void PageBinData()
         {
@@ -61,6 +38,7 @@ namespace WebSocketExtensions
             _bindata = null;
         }
         private byte[] _bindata = null;
+        public Guid ConnectionId { get; private set; }
         private string _pagePath = null;
         public long BinDataLen { get; private set; } = 0;
         public bool IsBinary { get; }

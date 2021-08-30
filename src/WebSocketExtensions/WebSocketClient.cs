@@ -10,12 +10,14 @@ namespace WebSocketExtensions
 {
     public class WebSocketClient : WebSocketReciever, IDisposable
     {
-        public WebSocketClient(Action<string, bool> logger = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
+        public WebSocketClient(Action<string, bool> logger = null, Guid? clientId = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
         {
+            _clientId = clientId ?? Guid.NewGuid();
             _recieveQueueLimitBytes = recieveQueueLimitBytes;
         }
         private ClientWebSocket _client;
         private Task _tsk;
+        private Guid _clientId;
         private long _recieveQueueLimitBytes = long.MaxValue;
         CancellationTokenSource _cts = new CancellationTokenSource();
         private Action<WebSocketReceivedResultEventArgs> _closeBeh;
@@ -35,9 +37,11 @@ namespace WebSocketExtensions
             var strBeh = MakeSafe(MessageHandler, "MessageHandler");
             _closeBeh = MakeSafe(CloseHandler, "CloseHandler");
 
-            _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
+            _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _logInfo, _recieveQueueLimitBytes);
 
-            _tsk = _client.ProcessIncomingMessages(_messageQueue, strBeh, binBeh, _closeBeh, _logError, _logInfo, null, _cts.Token);
+            _messageQueue.SetMessageHandler(strBeh, binBeh, _closeBeh, _client);
+
+            _tsk = _client.ProcessIncomingMessages(_messageQueue, _clientId, _cts.Token);
 
         }
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)

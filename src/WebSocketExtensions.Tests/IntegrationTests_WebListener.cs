@@ -11,11 +11,18 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace WebSocketExtensions.Tests
 {
     public class IntegrationTests_WebListener
     {
+        private ITestOutputHelper _output;
+
+        public IntegrationTests_WebListener(ITestOutputHelper output)
+        {
+            _output = output;
+        }
 
         static int _FreeTcpPort()
         {
@@ -357,6 +364,7 @@ namespace WebSocketExtensions.Tests
             var diff = last - centroid;
             var per = (diff / (float)centroid) * 100;
             Assert.True(per < 5);
+            _output.WriteLine("Completed");
         }
 
 

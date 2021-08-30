@@ -5,18 +5,18 @@ namespace WebSocketExtensions
 {
     public class WebSocketClosedEventArgs : WebSocketReceivedResultEventArgs
     {
-        public WebSocketClosedEventArgs(string clientId, WebSocketReceivedResultEventArgs args) : base(args.CloseStatus, args.CloseStatDescription)
+        public WebSocketClosedEventArgs(Guid connectionId, WebSocketReceivedResultEventArgs args) : base(args.CloseStatus, args.CloseStatDescription)
         {
             Exception = args.Exception;
-            ClientId = clientId;
+            ConnectionId = connectionId;
 
 
         }
-        public WebSocketClosedEventArgs(string clientid, WebSocketCloseStatus? res, string closeStatDesc) : base(res, closeStatDesc)
+        public WebSocketClosedEventArgs(Guid connectionId, WebSocketCloseStatus? res, string closeStatDesc) : base(res, closeStatDesc)
         {
-            ClientId = clientid;
+            ConnectionId = connectionId;
         }
 
-        public string ClientId { get; }
+        public Guid ConnectionId { get; }
     }
 }

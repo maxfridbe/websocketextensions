@@ -11,11 +11,18 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace WebSocketExtensions.Tests
 {
     public class IntegrationTests_HttpListener
     {
+        private ITestOutputHelper _output;
+
+        public IntegrationTests_HttpListener(ITestOutputHelper output)
+        {
+            _output = output;
+        }
 
         static int _FreeTcpPort()
         {
@@ -136,7 +143,10 @@ namespace WebSocketExtensions.Tests
                         //await Task.Delay(100);
                         await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
                     }
-                    catch { }
+                    catch (Exception e1)
+                    {
+
+                    }
                 });
                 Task.Run(async () =>
                 {
@@ -145,7 +155,10 @@ namespace WebSocketExtensions.Tests
                         //await Task.Delay(100);
                         await e.WebSocket.SendStringAsync(string.Empty, CancellationToken.None);
                     }
-                    catch { }
+                    catch (Exception e2)
+                    {
+
+                    }
                 });
             };
 
@@ -153,31 +166,37 @@ namespace WebSocketExtensions.Tests
             await server.StartAsync($"http://localhost:{port}/");
 
             List<long> memu = new List<long>();
+
             for (var i = 0; i < 3000; i++)
             {
                 string res = null;
                 using (var client = new WebSocketClient())
                 {
                     client.MessageHandler = (e) => res = e.Data;
-                    await client.ConnectAsync($"ws://localhost:{port}/aaa");
-                    Console.WriteLine($"Connect {i}");
+                  
+                        await client.ConnectAsync($"ws://localhost:{port}/aaa");
+                     
+                    _output.WriteLine($"Connect {i}");
                     await client.SendStringAsync("hi" + i.ToString(), CancellationToken.None);
-                    Console.WriteLine($"Disconnect {i}");
+                    _output.WriteLine($"Disconnect {i}");
                 }
 
                 if (i % 300 == 0)
                 {
                     GC.Collect();
-                   memu.Add( getmem());
+                    memu.Add(getmem());
                 }
+
             }
+
 
             var centroid = memu[memu.Count / 2];
             var last = memu.Last();
             var diff = last - centroid;
             var per = (diff / (float)centroid) * 100;
             Assert.True(per < 5);
-          //  File.WriteAllText("out.txt", $"{per}");
+            //  File.WriteAllText("out.txt", $"{per}");
+            _output.WriteLine("Completed");
 
         }
 
@@ -541,7 +560,7 @@ namespace WebSocketExtensions.Tests
             var clients = server.GetActiveClientIds();
             Assert.Equal(2, clients.Count);
 
-            await server.DisconnectClientById(clients[1], "dontlikeu");
+            await server.DisconnectClientByConnectionId(clients[1], "dontlikeu");
             clients = server.GetActiveClientIds();
             Assert.Equal(1, clients.Count);
             while (kickoffRes == null)
