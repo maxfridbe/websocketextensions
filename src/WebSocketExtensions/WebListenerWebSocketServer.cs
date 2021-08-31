@@ -32,7 +32,7 @@ namespace WebSocketExtensions
         private readonly long _queueThrottleLimit;
 
 
-        public IList<Guid> GetActiveClientIds()
+        public IList<Guid> GetActiveConnectionIds()
         {
             return _clients.Where(c => c.Value.State == WebSocketState.Open).Select(c => c.Key).ToList();
         }
@@ -42,7 +42,7 @@ namespace WebSocketExtensions
                 return false;
             return _webListener.IsListening;
         }
-        public Task DisconnectClientById(Guid connectionid, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
+        public Task DisconnectConnection(Guid connectionid, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
         {
             WebSocket ws = null;
             _clients.TryGetValue(connectionid, out ws);

@@ -30,7 +30,7 @@ namespace WebSocketExtensions
         private PagingMessageQueue _messageQueue;
         private readonly long _queueThrottleLimit;
 
-        public IList<Guid> GetActiveClientIds()
+        public IList<Guid> GetActiveConnectionIds()
         {
             return _clients.Where(c => c.Value.WebSocket.State == WebSocketState.Open).Select(c => c.Key).ToList();
         }
@@ -40,7 +40,7 @@ namespace WebSocketExtensions
                 return false;
             return _httpListener.IsListening;
         }
-        public Task DisconnectClientByConnectionId(Guid connectionId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
+        public Task DisconnectConnection(Guid connectionId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
         {
             WebSocketContext ctx = null;
             _clients.TryGetValue(connectionId, out ctx);

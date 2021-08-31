@@ -595,11 +595,11 @@ namespace WebSocketExtensions.Tests
 
             //act
             await Task.Delay(100);
-            var clients = server.GetActiveClientIds();
+            var clients = server.GetActiveConnectionIds();
             Assert.Equal(2, clients.Count);
 
-            await server.DisconnectClientById(clients[1], "dontlikeu");
-            clients = server.GetActiveClientIds();
+            await server.DisconnectConnection(clients[1], "dontlikeu");
+            clients = server.GetActiveConnectionIds();
             Assert.Equal(1, clients.Count);
             while (kickoffRes == null)
             {
