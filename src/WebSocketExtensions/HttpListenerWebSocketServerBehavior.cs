@@ -8,7 +8,7 @@ namespace WebSocketExtensions
     {
         public DateTime StartTime { get; } = DateTime.UtcNow;
 
-        public virtual void OnClientConnected(Guid connectionId, WebSocketContext webSocketContext) { }
+        public virtual void OnConnectionEstablished(Guid connectionId, WebSocketContext webSocketContext) { }
         public virtual bool OnValidateContext(WebSocketContext webSocketContext, ref int errStatusCode, ref string statusDescription) { return true; }
         public virtual void OnStringMessage(StringMessageReceivedEventArgs e) { }
         public virtual void OnBinaryMessage(BinaryMessageReceivedEventArgs e) { }

@@ -65,7 +65,12 @@ namespace WebSocketExtensions
 
         public void CompleteAdding()
         {
-            _messageQueue.CompleteAdding();
+            try
+            {
+                _messageQueue.CompleteAdding();
+            }
+            catch {
+            }
         }
     }
 }

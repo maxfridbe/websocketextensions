@@ -90,7 +90,7 @@ namespace WebSocketExtensions
             Action<string> logInfo,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            await Task.Run(async () => {
+          //  await Task.Factory.StartNew(async () => {
                 byte[] messageBufferBytes = new byte[1048576];
                 ArraySegment<byte> messageBuffer = new ArraySegment<byte>(messageBufferBytes);
 
@@ -109,7 +109,7 @@ namespace WebSocketExtensions
 
                     messageQueue.Push(msg);
                 }
-            });
+          //  });
         }
     }
 }

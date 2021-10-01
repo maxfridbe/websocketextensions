@@ -716,9 +716,10 @@ namespace WebSocketExtensions.Tests
             await client.ConnectAsync($"ws://localhost:{port}/aaa");
 
             //act
-            for (int i = 0; i < 200; i++)
+            var s = _getFile("tst2", 10);
+
+            for (int i = 0; i < 400; i++)
             {
-                var s = _getFile("tst2", 10);
                 await client.SendStreamAsync(File.OpenRead(s));
                 await Task.Delay(1);
             }

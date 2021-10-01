@@ -52,6 +52,10 @@ namespace WebSocketExtensions
                         remaining -= buffer.Length;
                     }
                 }
+                catch(Exception e)
+                {
+                    throw;
+                }
                 finally
                 {
                     if (dispose)

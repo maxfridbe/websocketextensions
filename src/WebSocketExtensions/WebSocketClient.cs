@@ -42,7 +42,7 @@ namespace WebSocketExtensions
 
             _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
 
-            _incomingMessagesTask = _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _cancellationTokenSource.Token);
+            _incomingMessagesTask = Task.Factory.StartNew(async () => await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _cancellationTokenSource.Token));
         }
 
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)

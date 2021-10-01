@@ -244,7 +244,7 @@ namespace WebSocketExtensions
                 Interlocked.Increment(ref _connectedClientCount);
                 _logInfo($"Connection id '{connectionId}' accepted; there are now {_connectedClientCount} total clients.");
 
-                var safeconnected = MakeSafe<Guid, WebSocketContext>(behavior.OnClientConnected, "behavior.OnClientConnected");
+                var safeconnected = MakeSafe<Guid, WebSocketContext>(behavior.OnConnectionEstablished, "behavior.OnClientConnected");
                 safeconnected(connectionId, webSocketContext);
             }
             catch (Exception e)
