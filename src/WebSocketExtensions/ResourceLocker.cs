@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,13 +8,13 @@ namespace WebSocketExtensions
     public class ResourceLocker
     {
         private Dictionary<object, SemaphoreSlim> _lockers = null;
-
         private object lockObj = new object();
 
         public ResourceLocker()
         {
             _lockers = new Dictionary<object, SemaphoreSlim>();
         }
+
         public void EnterLock(object resource)
         {
             SemaphoreSlim ss;
@@ -30,7 +29,6 @@ namespace WebSocketExtensions
                 {
                     ss = _lockers[resource];
                 }
-
             }
             try
             {
@@ -40,8 +38,8 @@ namespace WebSocketExtensions
             {
                 //disposed of while wait
             }
-
         }
+
         public Task EnterLockAsync(object resource, CancellationToken ct)
         {
             SemaphoreSlim ss;
@@ -56,11 +54,9 @@ namespace WebSocketExtensions
                 {
                     ss = _lockers[resource];
                 }
-
             }
-            return ss.WaitAsync(ct);
-            //return Task.FromResult(true);
 
+            return ss.WaitAsync(ct);
         }
 
         internal void RemoveLock(object resource)
@@ -73,7 +69,7 @@ namespace WebSocketExtensions
                     ss.Dispose();
                     _lockers.Remove(resource);
                 }
-            }//lock
+            }
         }
 
         public bool ExitLock(object resource)
@@ -85,25 +81,15 @@ namespace WebSocketExtensions
                 {
                     ss = _lockers?[resource];
                 }
-            }//lock
+            }
 
             if (ss == null)
                 return false;
 
-            if(ss.CurrentCount != 1)
+            if (ss.CurrentCount != 1)
                 ss?.Release();
 
             return true;
-
         }
-
-        //not used, is static
-        //public void Dispose()
-        //{
-        //    foreach(var l in _lockers)
-        //    {
-        //        l.Value.Dispose();
-        //    }
-        //}
     }
 }

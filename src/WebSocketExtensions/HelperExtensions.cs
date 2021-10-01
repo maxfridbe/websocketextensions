@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.WebSockets;
@@ -18,18 +16,19 @@ namespace WebSocketExtensions
         {
             return Task.Factory.FromAsync<HttpListenerContext>(listener.BeginGetContext, listener.EndGetContext, TaskCreationOptions.None);
         }
+
         public static void CleanupSendMutex(this WebSocket ws)
         {
             _locker.RemoveLock(ws);
         }
+
         public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();
-                throw new Exception("Websocket not open");
+                throw new Exception("Websocket not open.");
             }
-
 
             _locker.EnterLock(ws);
             try
@@ -64,16 +63,16 @@ namespace WebSocketExtensions
                 _locker.ExitLock(ws);
             }
         }
+
         public static Task SendCloseAsync(this WebSocket ws, WebSocketCloseStatus stat, string msg, CancellationToken tok = default(CancellationToken))
         {
-
             _locker.EnterLock(ws);
 
             try
             {
                 return ws.CloseAsync(stat, msg, tok);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw ex;
             }
@@ -81,7 +80,6 @@ namespace WebSocketExtensions
             {
                 _locker.ExitLock(ws);
             }
-
         }
 
         public static Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
@@ -89,8 +87,7 @@ namespace WebSocketExtensions
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();
-                return Task.FromException(new Exception("Websocket not open"));
-
+                return Task.FromException(new Exception("Websocket not open."));
             }
 
             _locker.EnterLock(ws);
@@ -111,7 +108,7 @@ namespace WebSocketExtensions
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();
-                return Task.FromException(new Exception("Websocket not open"));
+                return Task.FromException(new Exception("Websocket not open."));
             }
 
             _locker.EnterLock(ws);
@@ -123,8 +120,6 @@ namespace WebSocketExtensions
             {
                 _locker.ExitLock(ws);
             }
-
-
         }
 
         private static Task _send(WebSocket ws, ArraySegment<byte> messageSegment, WebSocketMessageType type, bool EOM, CancellationToken tok)

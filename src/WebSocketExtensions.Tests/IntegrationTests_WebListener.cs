@@ -575,41 +575,69 @@ namespace WebSocketExtensions.Tests
             string res = null;
             string kickoffRes = null;
 
-            var client = new WebSocketClient()
-            {
-                MessageHandler = (e) => res = e.Data,
-                CloseHandler = (e) =>
-                    kickoffRes = e.CloseStatDescription
-            };
-            await client.ConnectAsync($"ws://localhost:{port}/aaa");
-            await client.SendStringAsync("hi", CancellationToken.None);
-
-            var client2 = new WebSocketClient()
+            var oldClient = new WebSocketClient()
             {
                 MessageHandler = (e) => res = e.Data,
                 CloseHandler = (e) =>
                 kickoffRes = e.CloseStatDescription
             };
-            await client2.ConnectAsync($"ws://localhost:{port}/aaa");
-            await client2.SendStringAsync("hi", CancellationToken.None);
+            await oldClient.ConnectAsync($"ws://localhost:{port}/aaa");
+            await oldClient.SendStringAsync("hi", CancellationToken.None);
 
-            //act
             await Task.Delay(100);
             var clients = server.GetActiveConnectionIds();
-            Assert.Equal(2, clients.Count);
+            Guid oldConnectionId = clients.First();
 
-            await server.DisconnectConnection(clients[1], "dontlikeu");
-            clients = server.GetActiveConnectionIds();
-            Assert.Equal(1, clients.Count);
-            while (kickoffRes == null)
+            for (int i=0; i < 100; i++)
             {
+                var newClient = new WebSocketClient()
+                {
+                    MessageHandler = (e) => res = e.Data,
+                    CloseHandler = (e) =>
+                    kickoffRes = e.CloseStatDescription
+                };
+                await newClient.ConnectAsync($"ws://localhost:{port}/aaa");
+                await newClient.SendStringAsync("hi", CancellationToken.None);
+
                 await Task.Delay(100);
+                var newClients = server.GetActiveConnectionIds();
+                Guid newConnectionId = newClients.Where(id => id != oldConnectionId).First();
+                Assert.Equal(2, newClients.Count);
 
+                //Disconnect old client
+                await server.DisconnectConnection(oldConnectionId, "dontlikeu");
+
+                await Task.Delay(100);
+                newClients = server.GetActiveConnectionIds();
+                Assert.Equal(1, newClients.Count);
+                Assert.Equal(newConnectionId, newClients.First());
+
+                //Verify that new client still works
+                await newClient.SendStringAsync("hi", CancellationToken.None);
+
+                //Verify that old client doesn't work
+                try
+                {
+                    await oldClient.SendStringAsync("do you like me?", CancellationToken.None);
+                }
+                catch (Exception e)
+                {
+                    string message = e.ToString();
+                }
+
+                //Verify that new client still works again
+                await newClient.SendStringAsync("hi", CancellationToken.None);
+
+                while (kickoffRes == null)
+                {
+                    await Task.Delay(100);
+                }
+                Assert.Equal("dontlikeu", kickoffRes);
+                Assert.Equal("hihi", res);
+
+                oldClient = newClient;
+                oldConnectionId = newConnectionId;
             }
-            Assert.Equal("dontlikeu", kickoffRes);
-            //assert
-            Assert.Equal("hihi", res);
-
         }
 
 
@@ -690,16 +718,12 @@ namespace WebSocketExtensions.Tests
             //act
             for (int i = 0; i < 200; i++)
             {
-
                 var s = _getFile("tst2", 10);
                 await client.SendStreamAsync(File.OpenRead(s));
                 await Task.Delay(1);
-                //Assert.Equal(new FileInfo(s).Length, recievedSize);
             }
+
             //assert
-
         }
-
-
     }
 }

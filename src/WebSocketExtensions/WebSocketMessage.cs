@@ -6,58 +6,10 @@ namespace WebSocketExtensions
 {
     public class WebSocketMessage : IDisposable
     {
-        public WebSocketMessage(byte[] data, Guid connectionId) { _bindata = data; ConnectionId = connectionId; BinDataLen = _bindata.Length; IsBinary = true; }
-        public WebSocketMessage(string data, Guid connectionId) { StringData = data;
-            ConnectionId = connectionId;
-        }
-        public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId)
-        {
-            Exception = e;
-            ConnectionId = connectionId;
-            ExceptionMessage = exceptionMessage;
-        }
-        public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc, Guid connectionId)
-        {
-            WebSocketCloseStatus = status;
-            CloseStatDesc = closeStatDesc;
-            ConnectionId = connectionId;
-            IsDisconnect = true;
-        }
         public Action<StringMessageReceivedEventArgs> StringBehavior { get; private set; }
         public Action<BinaryMessageReceivedEventArgs> BinaryBehavior { get; private set; }
-              
-       
 
-        public void PageBinData()
-        {
-            _pagePath = Path.GetTempFileName();
-            File.WriteAllBytes(_pagePath, _bindata);//todo async
-            _bindata = null;
-        }
-        private byte[] _bindata = null;
         public Guid ConnectionId { get; private set; }
-        private string _pagePath = null;
-        public long BinDataLen { get; private set; } = 0;
-        public bool IsBinary { get; }
-
-        public byte[] GetBinData()
-        {
-            if (_bindata != null)
-                return _bindata;
-
-            return File.ReadAllBytes(_pagePath);
-
-        }
-
-        public void Dispose()
-        {
-            if (!string.IsNullOrWhiteSpace(_pagePath))
-                File.Delete(_pagePath);
-            _bindata = null;
-            StringBehavior = null;
-            BinaryBehavior = null;
-
-        }
         public bool InMemory => _bindata != null;
         public string StringData { get; private set; }
         public WebSocketCloseStatus? WebSocketCloseStatus { get; private set; }
@@ -65,5 +17,96 @@ namespace WebSocketExtensions
         public bool IsDisconnect { get; private set; }
         public Exception Exception { private set; get; }
         public string ExceptionMessage { get; private set; }
+        public long BinDataLen { get; private set; } = 0;
+        public bool IsBinary { get; }
+
+        private WebSocket _webSocket;
+        private byte[] _bindata = null;
+        private string _pagePath = null;        
+
+        public WebSocketMessage(byte[] data, Guid connectionId) {
+            _bindata = data;
+            ConnectionId = connectionId;
+            BinDataLen = _bindata.Length;
+            IsBinary = true;
+        }
+
+        public WebSocketMessage(string data, Guid connectionId)
+        {
+            StringData = data;
+            ConnectionId = connectionId;
+        }
+
+        public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId)
+        {
+            Exception = e;
+            ConnectionId = connectionId;
+            ExceptionMessage = exceptionMessage;
+        }
+
+        public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc, Guid connectionId)
+        {
+            WebSocketCloseStatus = status;
+            CloseStatDesc = closeStatDesc;
+            ConnectionId = connectionId;
+            IsDisconnect = true;
+        }
+
+        public void PageBinData()
+        {
+            _pagePath = Path.GetTempFileName();
+            File.WriteAllBytes(_pagePath, _bindata);//todo async
+            _bindata = null;
+        }
+
+        public byte[] GetBinData()
+        {
+            if (_bindata != null)
+                return _bindata;
+
+            return File.ReadAllBytes(_pagePath);
+        }
+
+        public void SetMessageHandlers(
+             Action<StringMessageReceivedEventArgs> messageBehavior,
+             Action<BinaryMessageReceivedEventArgs> binaryBehavior,
+             WebSocket webSocket)
+        {
+            StringBehavior = messageBehavior;
+            BinaryBehavior = binaryBehavior;
+            _webSocket = webSocket;
+        }
+
+        public void HandleMessage(Action<string> logError)
+        {
+            if (IsBinary)
+            {
+                var args = new BinaryMessageReceivedEventArgs(GetBinData(), _webSocket, ConnectionId);
+                BinaryBehavior(args);
+            }
+            else if (StringData != null)
+            {
+                var args = new StringMessageReceivedEventArgs(StringData, _webSocket, ConnectionId);
+                StringBehavior(args);
+            }
+            else if (Exception != null)
+            {
+                if (Exception is OperationCanceledException)
+                    return;
+
+                logError($"Exception in read thread of connection {ConnectionId}:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!string.IsNullOrWhiteSpace(_pagePath))
+                File.Delete(_pagePath);
+
+            _webSocket = null;
+            _bindata = null;
+            StringBehavior = null;
+            BinaryBehavior = null;
+        }
     }
 }
