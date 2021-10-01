@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -10,19 +7,15 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-
     public static class Extensions
     {
-
         public async static Task<WebSocketMessage> ReceiveMessageAsync(this WebSocket webSocket,
                                         ArraySegment<byte> buff,
                                         Guid connectionId,
                                         CancellationToken token = default(CancellationToken))
         {
-
             try
             {
-
                 using (var ms = new MemoryStream())
                 {
                     while (webSocket.State == WebSocketState.Open)
@@ -53,21 +46,17 @@ namespace WebSocketExtensions
 
                             if (webSocket.State != WebSocketState.Closed)
                                 await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Honoring disconnect", token);
-                            // Task.Run(() => webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Ack Disconnect Req", CancellationToken.None));
 
                             var closeStat = receivedResult.CloseStatus;
                             var closeStatDesc = receivedResult.CloseStatusDescription;
 
                             return new WebSocketMessage(closeStat, closeStatDesc, connectionId);
-
                         }
                     }
 
                     return new WebSocketMessage(null, $"Websocket State is {webSocket.State}", connectionId);
                 }
-
             }
-
             catch (WebSocketException ex)
             {
                 switch (ex.WebSocketErrorCode)
@@ -88,31 +77,39 @@ namespace WebSocketExtensions
                 }
 
                 return new WebSocketMessage("Non WebSocketException", e, connectionId);
-
             }
         }
 
         public static async Task ProcessIncomingMessages(
-            this WebSocket webSocket
-            , PagingMessageQueue messageQueue
-            , Guid connectionId
-            , CancellationToken token = default(CancellationToken))
+            this WebSocket webSocket,
+            PagingMessageQueue messageQueue,
+            Guid connectionId,
+            Action<StringMessageReceivedEventArgs> messageBehavior,
+            Action<BinaryMessageReceivedEventArgs> binaryBehavior,
+            Action<WebSocketReceivedResultEventArgs> closeBehavior,
+            Action<string> logInfo,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var buff = new byte[1048576];
+            await Task.Run(async () => {
+                byte[] messageBufferBytes = new byte[1048576];
+                ArraySegment<byte> messageBuffer = new ArraySegment<byte>(messageBufferBytes);
 
-
-            var s = new ArraySegment<byte>(buff);
-            while (!token.IsCancellationRequested)
-            {
-                var msg = await webSocket.ReceiveMessageAsync(s, connectionId, token).ConfigureAwait(false);
-
-                if(!messageQueue.Push(msg))
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    break;
+                    var msg = await webSocket.ReceiveMessageAsync(messageBuffer, connectionId, cancellationToken).ConfigureAwait(false);
+
+                    if (msg.IsDisconnect)
+                    {
+                        logInfo.Invoke($"Websocket Connection Disconnected");
+                        closeBehavior(new WebSocketClosedEventArgs(connectionId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
+                        break;
+                    }
+
+                    msg.SetMessageHandlers(messageBehavior, binaryBehavior, webSocket);
+
+                    messageQueue.Push(msg);
                 }
-            }
-
+            });
         }
-
     }
 }

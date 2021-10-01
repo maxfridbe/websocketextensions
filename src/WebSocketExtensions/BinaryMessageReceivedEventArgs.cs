@@ -5,10 +5,10 @@ namespace WebSocketExtensions
 {
     public class BinaryMessageReceivedEventArgs
     {
-        public byte[] Data { get; }
-        public WebSocket WebSocket { get; set; }
         public Guid ConnectionId { get; set; }
-        public string ClientId { get; set; }
+        public WebSocket WebSocket { get; set; }
+        public byte[] Data { get; }
+        
         public BinaryMessageReceivedEventArgs(byte[] v, WebSocket webSocket, Guid connectionId)
         {
             Data = v;
