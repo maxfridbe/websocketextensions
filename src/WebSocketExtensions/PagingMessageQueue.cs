@@ -20,7 +20,7 @@ namespace WebSocketExtensions
 
             _queueBinarySizeBytes = 0L;
 
-            new Thread(() =>
+            var t = new Thread(() =>
             {
                 foreach (var msg in _messageQueue.GetConsumingEnumerable())
                 {
@@ -43,7 +43,10 @@ namespace WebSocketExtensions
 
                 _messageQueue.Dispose();
                 _messageQueue = null;
-            }).Start();
+            });
+            t.IsBackground = false;
+
+            t.Start();
         }
 
         public void Push(WebSocketMessage msg)

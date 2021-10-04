@@ -14,8 +14,8 @@
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
     <Version>2.1.2.0</Version>
-    <AssemblyVersion>2.1.2.0</AssemblyVersion>
-    <FileVersion>2.1.2.0</FileVersion>
+    <AssemblyVersion>2.1.3.0</AssemblyVersion>
+    <FileVersion>2.1.3.0</FileVersion>
   
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
