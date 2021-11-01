@@ -42,6 +42,7 @@ namespace WebSocketExtensions
             Exception = e;
             ConnectionId = connectionId;
             ExceptionMessage = exceptionMessage;
+            IsDisconnect = true;
         }
 
         public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc, Guid connectionId)
