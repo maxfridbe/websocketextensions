@@ -22,7 +22,8 @@ namespace WebSocketExtensions
 
         private WebSocket _webSocket;
         private byte[] _bindata = null;
-        private string _pagePath = null;        
+        private string _pagePath = null;
+        private static string PAGING_TEMP_PATH = Path.GetTempPath();
 
         public WebSocketMessage(byte[] data, Guid connectionId) {
             _bindata = data;
@@ -55,7 +56,7 @@ namespace WebSocketExtensions
 
         public void PageBinData()
         {
-            _pagePath = Path.GetTempFileName();
+            _pagePath = PAGING_TEMP_PATH + Guid.NewGuid().ToString() + ".wse";
             File.WriteAllBytes(_pagePath, _bindata);//todo async
             _bindata = null;
         }
