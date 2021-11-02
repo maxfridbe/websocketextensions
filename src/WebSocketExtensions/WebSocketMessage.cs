@@ -37,12 +37,12 @@ namespace WebSocketExtensions
             ConnectionId = connectionId;
         }
 
-        public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId)
+        public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId, bool isdisconnect)
         {
             Exception = e;
             ConnectionId = connectionId;
             ExceptionMessage = exceptionMessage;
-            IsDisconnect = true;
+            IsDisconnect = isdisconnect;
         }
 
         public WebSocketMessage(WebSocketCloseStatus? status, string closeStatDesc, Guid connectionId)
@@ -92,9 +92,7 @@ namespace WebSocketExtensions
             }
             else if (Exception != null)
             {
-                if (Exception is OperationCanceledException)
-                    return;
-
+               
                 logError($"Exception in read thread of connection {ConnectionId}:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
             }
         }
