@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -15,21 +16,68 @@ namespace WebSocketExtensions
     public class WebListenerWebSocketServer : WebSocketReciever, IDisposable
     {
         private ConcurrentDictionary<Guid, WebSocket> _clients;
+        private ConcurrentDictionary<Guid, DateTime> _clientsLastReceived;
+        private ConcurrentDictionary<Guid, CancellationTokenSource> _clientCancellationTokenSources;
         private ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>> _behaviors;
         private WebListener _webListener;
         private Task _listenTask;
         private PagingMessageQueue _messageQueue;
         private CancellationTokenSource _cancellationTokenSource;
+        private System.Timers.Timer _healthTimer;
         
         private int _connectedClientCount = 0;
         private readonly long _queueThrottleLimit;
+        private readonly TimeSpan _pingIntervalTimeSpan;
+        private readonly TimeSpan _timeoutIntervalTimeSpan;
+
         private bool _isDisposing = false;
 
-        public WebListenerWebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
+        public WebListenerWebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue, int pingIntervalMilliseconds = 30000, int timeoutIntervalMilliseconds = 120000) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
+            _clientsLastReceived = new ConcurrentDictionary<Guid, DateTime>();
+            _clientCancellationTokenSources = new ConcurrentDictionary<Guid, CancellationTokenSource>();
             _queueThrottleLimit = queueThrottleLimitBytes;
+            _pingIntervalTimeSpan = TimeSpan.FromMilliseconds(pingIntervalMilliseconds);
+            _timeoutIntervalTimeSpan = TimeSpan.FromMilliseconds(timeoutIntervalMilliseconds);
+
+            _healthTimer = new System.Timers.Timer(pingIntervalMilliseconds);
+
+            _healthTimer.Elapsed += _healthTimer_Elapsed;
+
+            _healthTimer.Start();
+        }
+
+        private void _healthTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            foreach(var kvp in _clients)
+            {
+                if (_clientsLastReceived.TryGetValue(kvp.Key, out DateTime lastReceived))
+                {
+                    var lastReceivedDifference = DateTime.UtcNow - lastReceived;
+
+                    if (lastReceivedDifference > _timeoutIntervalTimeSpan)
+                    {
+                        if (_clientCancellationTokenSources.TryGetValue(kvp.Key, out CancellationTokenSource clientCancellationTokenSource))
+                        {
+                            _logInfo($"Health check triggering client cancellation: {kvp.Key}.");
+
+                            clientCancellationTokenSource.Cancel();
+                        }
+                    }
+                    else if (lastReceivedDifference > _pingIntervalTimeSpan)
+                    {
+                        SendStringAsync(kvp.Key, "");
+                    }
+                }
+                else
+                {
+                    updateLastReceived(kvp.Key);
+
+                    SendStringAsync(kvp.Key, "");
+                }
+            }
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -193,6 +241,11 @@ namespace WebSocketExtensions
             _logInfo($"Listening loop stopped.");
         }
 
+        private void updateLastReceived(Guid connectionId)
+        {
+            _clientsLastReceived.AddOrUpdate(connectionId, DateTime.UtcNow, (key, oldValue) => DateTime.UtcNow);
+        }
+
         private async Task handleClient<TWebSocketBehavior>(RequestContext requestContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
             where TWebSocketBehavior : WebListenerWebSocketServerBehavior
         {
@@ -245,15 +298,20 @@ namespace WebSocketExtensions
                 return;
             }
 
+            var clientCancellationTokenSource = new CancellationTokenSource();
+
             try
             {
+                _clientCancellationTokenSources.TryAdd(connectionId, clientCancellationTokenSource);
+
                 using (webSocket)
                 {
                     var stringBehavior = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binaryBehavior = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
+                    var healthBehavior = MakeSafe<HealthMessageReceivedEventArgs>((r) => { updateLastReceived(r.ConnectionId); behavior.OnHealthMessage(r); }, "behavior.OnHealthMessage");
                     var closeBehavior = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r)), "behavior.OnClose");
 
-                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, token);
+                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, healthBehavior, closeBehavior, _logInfo, CancellationTokenSource.CreateLinkedTokenSource(token, clientCancellationTokenSource.Token).Token);
                 }
             }
             finally
@@ -271,6 +329,11 @@ namespace WebSocketExtensions
                 }
 
                 _logInfo($"Completed HandleClient task for connection id '{connectionId}'.");
+
+                _clientCancellationTokenSources.TryRemove(connectionId, out clientCancellationTokenSource);
+
+                webSocket.Dispose();
+                clientCancellationTokenSource.Dispose();
             }
         }
 
@@ -300,6 +363,7 @@ namespace WebSocketExtensions
             if (!_isDisposing)
             {
                 _isDisposing = true;
+                _healthTimer.Dispose();
                 stopListeningThread();
                 _messageQueue?.CompleteAdding();
             }

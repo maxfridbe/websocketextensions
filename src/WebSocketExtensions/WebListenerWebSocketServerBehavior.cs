@@ -12,6 +12,7 @@ namespace WebSocketExtensions
         public virtual bool OnValidateContext(RequestContext requestContext, ref int errorStatusCode, ref string statusDescription) { return true; }
         public virtual void OnStringMessage(StringMessageReceivedEventArgs e) { }
         public virtual void OnBinaryMessage(BinaryMessageReceivedEventArgs e) { }
+        public virtual void OnHealthMessage(HealthMessageReceivedEventArgs e) { }
         public virtual void OnClose(WebSocketClosedEventArgs e) { }
         public virtual void OnError(ErrorEventArgs e) { }
     }

@@ -36,9 +36,15 @@ namespace WebSocketExtensions
                                 }
                                 else
                                 {
-                                    return new WebSocketMessage(Encoding.UTF8.GetString(arr), connectionId);
+                                    if (receivedResult.Count > 0)
+                                    {
+                                        return new WebSocketMessage(Encoding.UTF8.GetString(arr), connectionId);
+                                    }
+                                    else
+                                    {
+                                        return new WebSocketMessage(connectionId);
+                                    }
                                 }
-
                             }
                         }
                         else if (receivedResult.MessageType == WebSocketMessageType.Close)
@@ -98,6 +104,7 @@ namespace WebSocketExtensions
             Guid connectionId,
             Action<StringMessageReceivedEventArgs> messageBehavior,
             Action<BinaryMessageReceivedEventArgs> binaryBehavior,
+            Action<HealthMessageReceivedEventArgs> healthBehavior,
             Action<WebSocketReceivedResultEventArgs> closeBehavior,
             Action<string> logInfo,
             CancellationToken cancellationToken = default(CancellationToken))
@@ -117,7 +124,7 @@ namespace WebSocketExtensions
                     break;
                 }
 
-                msg.SetMessageHandlers(messageBehavior, binaryBehavior, webSocket);
+                msg.SetMessageHandlers(messageBehavior, binaryBehavior, healthBehavior, webSocket);
 
                 messageQueue.Push(msg);
             }

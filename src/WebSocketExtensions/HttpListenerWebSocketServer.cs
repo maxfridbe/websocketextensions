@@ -263,9 +263,10 @@ namespace WebSocketExtensions
                 {
                     var stringBehavior = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
                     var binaryBehavior = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
+                    var healthBehavior = MakeSafe<HealthMessageReceivedEventArgs>((e) => { }, "behavior.OnHealthMessage");
                     var closeBehavior = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r)), "behavior.OnClose");
 
-                    await webSocketContext.WebSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, token);
+                    await webSocketContext.WebSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, healthBehavior, closeBehavior, _logInfo, token);
                 }
             }
             finally

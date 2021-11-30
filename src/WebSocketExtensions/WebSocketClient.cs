@@ -10,6 +10,7 @@ namespace WebSocketExtensions
     {
         public Action<StringMessageReceivedEventArgs> MessageHandler { get; set; } = (e) => { };
         public Action<BinaryMessageReceivedEventArgs> BinaryHandler { get; set; } = (e) => { };
+        public Action<HealthMessageReceivedEventArgs> HealthHandler { get; set; } = (e) => { };
         public Action<WebSocketReceivedResultEventArgs> CloseHandler { get; set; } = (e) => { };
         public Action<ClientWebSocketOptions> ConfigureOptionsBeforeConnect { get; set; } = (e) => { };
 
@@ -38,11 +39,12 @@ namespace WebSocketExtensions
 
             var messageBehavior = MakeSafe(MessageHandler, "MessageHandler");
             var binaryBehavior = MakeSafe(BinaryHandler, "BinaryHandler");
+            var healthBehavior = MakeSafe<HealthMessageReceivedEventArgs>((e) => { _client.SendStringAsync(""); HealthHandler(e); }, "HealthHandler");
             _closeBehavior = MakeSafe(CloseHandler, "CloseHandler");
 
             _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
 
-            _incomingMessagesTask = Task.Factory.StartNew(async () => await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _cancellationTokenSource.Token));
+            _incomingMessagesTask = Task.Factory.StartNew(async () => await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, healthBehavior, _closeBehavior, _logInfo, _cancellationTokenSource.Token));
         }
 
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)

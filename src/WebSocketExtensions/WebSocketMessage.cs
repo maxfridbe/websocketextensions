@@ -8,6 +8,7 @@ namespace WebSocketExtensions
     {
         public Action<StringMessageReceivedEventArgs> StringBehavior { get; private set; }
         public Action<BinaryMessageReceivedEventArgs> BinaryBehavior { get; private set; }
+        public Action<HealthMessageReceivedEventArgs> HealthBehavior { get; private set; }
 
         public Guid ConnectionId { get; private set; }
         public bool InMemory => _bindata != null;
@@ -24,6 +25,11 @@ namespace WebSocketExtensions
         private byte[] _bindata = null;
         private string _pagePath = null;
         private static string PAGING_TEMP_PATH = Path.GetTempPath();
+
+        public WebSocketMessage(Guid connectionId)
+        {
+            ConnectionId = connectionId;
+        }
 
         public WebSocketMessage(byte[] data, Guid connectionId) {
             _bindata = data;
@@ -72,10 +78,12 @@ namespace WebSocketExtensions
         public void SetMessageHandlers(
              Action<StringMessageReceivedEventArgs> messageBehavior,
              Action<BinaryMessageReceivedEventArgs> binaryBehavior,
+             Action<HealthMessageReceivedEventArgs> healthBehavior,
              WebSocket webSocket)
         {
             StringBehavior = messageBehavior;
             BinaryBehavior = binaryBehavior;
+            HealthBehavior = healthBehavior;
             _webSocket = webSocket;
         }
 
@@ -93,8 +101,12 @@ namespace WebSocketExtensions
             }
             else if (Exception != null)
             {
-               
                 logError($"Exception in read thread of connection {ConnectionId}:\r\n {ExceptionMessage}\r\n{Exception}\r\n{ (Exception.InnerException != null ? Exception.InnerException.ToString() : String.Empty) }");
+            }
+            else
+            {
+                var args = new HealthMessageReceivedEventArgs(_webSocket, ConnectionId);
+                HealthBehavior(args);
             }
         }
 
@@ -107,6 +119,7 @@ namespace WebSocketExtensions
             _bindata = null;
             StringBehavior = null;
             BinaryBehavior = null;
+            HealthBehavior = null;
         }
     }
 }
