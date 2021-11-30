@@ -28,7 +28,7 @@ namespace WebSocketExtensions
 
         public WebListenerWebSocketServer(Action<string, bool> logger = null,
             long queueThrottleLimitBytes = long.MaxValue,
-            int keepAlivePingIntervalS = 20) : base(logger)
+            int keepAlivePingIntervalS = 30) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();

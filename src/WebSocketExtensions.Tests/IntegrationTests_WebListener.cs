@@ -397,30 +397,102 @@ namespace WebSocketExtensions.Tests
 
 
 
+        //[Fact]
+        //public async Task TestServer_Client_EXE_DIES()
+        //{
+        //    //arrange
+        //    var server = new WebListenerWebSocketServer();
+        //    var port = _FreeTcpPort();
+        //    Stopwatch sw = null;
+        //    TimeSpan ts = default(TimeSpan);
+        //    bool disconnected = false;
+        //    Guid connid = Guid.Empty;
+        //    var beh = new testBeh()
+        //    {
+        //        ClosedHandler = (e) =>
+        //        {
+        //            if (connid == e.ConnectionId)
+        //            {
+        //                ts = sw.Elapsed;
+        //                disconnected = true;
+
+        //            }
+        //        },
+        //        ConnectionEstablished = (cid, ctx) =>
+        //        {
+        //            connid = cid;
+        //        }
+
+        //    };
+        //    beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+        //    var u = $"://localhost:{port}/";
+        //    server.AddRouteBehavior("/aaa", () => beh);
+        //    await server.StartAsync("http" + u);
+
+        //    var pid = runClient(port);
+
+        //    var p = Process.GetProcessById(pid);
+
+        //    await Task.Delay(1000);//wait a sec send data
+
+        //    var times = 0;
+        //    while (times < 100)
+        //    {
+        //        try
+        //        {
+        //            await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"hi there {DateTime.Now.Second}"));
+        //        }
+        //        catch
+        //        {
+        //            break;
+        //        }
+        //        await Task.Delay(100);
+        //        times++;
+        //    }
+        //    sw = Stopwatch.StartNew();
+        //    p.Kill();
+
+        //    while (!disconnected && sw.Elapsed.TotalSeconds < 100)
+        //    {
+        //        await Task.Delay(100);
+        //    }
+
+        //    Assert.True(disconnected);
+        //    server.Dispose();
+
+        //}
+
+
         [Fact]
-        public async Task TestServer_Client_EXE_DIES()
+        public async Task TestServer_Client_External_ExeDies()
         {
             //arrange
             var server = new WebListenerWebSocketServer();
-            var port = _FreeTcpPort();
+            var port = 8883;//_FreeTcpPort();
             Stopwatch sw = null;
-            TimeSpan ts = default(TimeSpan);
+
             bool disconnected = false;
             Guid connid = Guid.Empty;
+            TaskCompletionSource<bool> connectionEstablished = new TaskCompletionSource<bool>();
+            TaskCompletionSource<bool> disconnectedTCS = new TaskCompletionSource<bool>();
+
             var beh = new testBeh()
             {
                 ClosedHandler = (e) =>
                 {
                     if (connid == e.ConnectionId)
                     {
-                        ts = sw.Elapsed;
+                        disconnectedTCS.TrySetResult(true);
                         disconnected = true;
 
                     }
                 },
                 ConnectionEstablished = (cid, ctx) =>
                 {
+                    Console.WriteLine("Connected");
                     connid = cid;
+
+                    connectionEstablished.TrySetResult(true);
                 }
 
             };
@@ -429,31 +501,41 @@ namespace WebSocketExtensions.Tests
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
 
-            var pid = runClient(port);
 
+            var pid = runClient(port);
+       
             var p = Process.GetProcessById(pid);
 
-            await Task.Delay(1000);//wait a sec send data
+            await connectionEstablished.Task;
+
 
             var times = 0;
-            while (times < 100)
+            while (times < 1000 || !disconnected)
             {
-                await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"hi there {DateTime.Now.Second}"));
+                if(times ==10)
+                    p.Kill();
+                try
+                {
+                    await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"ServerTime: {DateTime.Now.ToLongTimeString()}"));
+                }
+                catch
+                {
+                    break;
+                }
                 await Task.Delay(100);
                 times++;
             }
             sw = Stopwatch.StartNew();
-            p.Kill();
 
-            while (!disconnected && sw.Elapsed.TotalSeconds < 100)
-            {
-                await Task.Delay(100);
-            }
+
+            await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(6)), disconnectedTCS.Task);
+            var time = sw.Elapsed;
 
             Assert.True(disconnected);
             server.Dispose();
 
         }
+
 
         [Fact(Skip = "only do when you have")]
         public async Task TestServer_Client_External_NetworkCableDisconnect()
@@ -482,8 +564,8 @@ namespace WebSocketExtensions.Tests
                 ConnectionEstablished = (cid, ctx) =>
                 {
                     Console.WriteLine("Connected");
-                    connectionEstablished.TrySetResult(true);
                     connid = cid;
+                    connectionEstablished.TrySetResult(true);
                 }
 
             };
@@ -524,8 +606,10 @@ namespace WebSocketExtensions.Tests
             var exePath = AppDomain.CurrentDomain.BaseDirectory;
             var exeName = AppDomain.CurrentDomain.FriendlyName;
             var assemblyName = exeName.Substring(0, exeName.Length - 4);
-
-            string callingArgs = $"\"{exePath}..\\..\\..\\..\\ClientTest\\bin\\Debug\\netcoreapp2.2\\ClientTest.dll\" {port.ToString().Trim()}";
+            var exep = $"{exePath}..\\..\\..\\..\\ClientTest\\bin\\Debug\\netcoreapp2.2\\ClientTest.dll";
+            var fullp = Path.GetFullPath(exep);
+            Assert.True(File.Exists(fullp));
+            string callingArgs = $"\"{fullp}\" {port.ToString().Trim()}";
 
             var p = new Process
             {
