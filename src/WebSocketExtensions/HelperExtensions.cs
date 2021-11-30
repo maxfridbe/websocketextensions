@@ -24,6 +24,9 @@ namespace WebSocketExtensions
 
         public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
+            if (ws == null)
+                throw new Exception("Websocket is null");
+
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();
@@ -70,6 +73,9 @@ namespace WebSocketExtensions
 
         public static Task SendCloseAsync(this WebSocket ws, WebSocketCloseStatus stat, string msg, CancellationToken tok = default(CancellationToken))
         {
+            if (ws == null)
+                return Task.FromException(new Exception("Websocket is null"));
+
             _locker.EnterLock(ws);
 
             try
@@ -88,6 +94,9 @@ namespace WebSocketExtensions
 
         public static Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
         {
+            if (ws == null)
+                return Task.FromException(new Exception("Websocket is null"));
+
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();
@@ -109,6 +118,9 @@ namespace WebSocketExtensions
 
         public static Task SendStringAsync(this WebSocket ws, string data, CancellationToken tok = default(CancellationToken))
         {
+            if (ws == null)
+                return Task.FromException(new Exception("Websocket is null"));
+
             if (ws.State != WebSocketState.Open)
             {
                 ws.CleanupSendMutex();

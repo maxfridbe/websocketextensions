@@ -87,8 +87,8 @@ namespace WebSocketExtensions
                     }
                     return new WebSocketMessage(status: WebSocketCloseStatus.EndpointUnavailable, closeStatDesc: "Closing due to CancellationToken abort", connectionId: connectionId);
                 }
-
-                return new WebSocketMessage("Non WebSocketException", e, connectionId, false);
+                
+                return new WebSocketMessage("Non WebSocketException", e, connectionId, true);
             }
         }
 

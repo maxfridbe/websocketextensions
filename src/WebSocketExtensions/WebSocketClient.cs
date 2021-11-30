@@ -31,7 +31,6 @@ namespace WebSocketExtensions
         public async Task ConnectAsync(string url, CancellationToken tok = default(CancellationToken))
         {
             _client = new ClientWebSocket();
-
             ConfigureOptionsBeforeConnect(_client.Options);
 
             await _client.ConnectAsync(new Uri(url), tok);

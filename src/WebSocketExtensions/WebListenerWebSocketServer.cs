@@ -20,16 +20,20 @@ namespace WebSocketExtensions
         private Task _listenTask;
         private PagingMessageQueue _messageQueue;
         private CancellationTokenSource _cancellationTokenSource;
-        
+
         private int _connectedClientCount = 0;
         private readonly long _queueThrottleLimit;
+        private readonly TimeSpan _keepAlivePingInterval;
         private bool _isDisposing = false;
 
-        public WebListenerWebSocketServer(Action<string, bool> logger = null, long queueThrottleLimitBytes = long.MaxValue) : base(logger)
+        public WebListenerWebSocketServer(Action<string, bool> logger = null,
+            long queueThrottleLimitBytes = long.MaxValue,
+            int keepAlivePingIntervalS = 20) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
+            _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -45,10 +49,24 @@ namespace WebSocketExtensions
             return _webListener.IsListening;
         }
 
+        public void AbortConnection(Guid connectionid)
+        {
+            WebSocket ws = null;
+            if (!_clients.TryGetValue(connectionid, out ws))
+            {
+                return;
+            }
+
+            ws.Abort();
+        }
+
         public Task DisconnectConnection(Guid connectionid, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
         {
             WebSocket ws = null;
-            _clients.TryGetValue(connectionid, out ws);
+            if (!_clients.TryGetValue(connectionid, out ws))
+            {
+                return Task.CompletedTask;
+            }
 
             return ws.SendCloseAsync(status, description, CancellationToken.None);
         }
@@ -56,7 +74,10 @@ namespace WebSocketExtensions
         public Task SendStreamAsync(Guid connectionid, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(connectionid, out ws);
+            if (!_clients.TryGetValue(connectionid, out ws))
+            {
+                throw new Exception($"connectionId {connectionid} is no longer a client");
+            }
 
             return ws.SendStreamAsync(stream, dispose, tok);
         }
@@ -64,7 +85,10 @@ namespace WebSocketExtensions
         public Task SendBytesAsync(Guid connectionid, byte[] data, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(connectionid, out ws);
+            if (!_clients.TryGetValue(connectionid, out ws))
+            {
+                throw new Exception($"connectionId {connectionid} is no longer a client");
+            }
 
             return ws.SendBytesAsync(data, tok);
         }
@@ -72,7 +96,10 @@ namespace WebSocketExtensions
         public Task SendStringAsync(Guid connectionid, string data, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
-            _clients.TryGetValue(connectionid, out ws);
+            if (!_clients.TryGetValue(connectionid, out ws))
+            {
+                throw new Exception($"connectionId {connectionid} is no longer a client");
+            }
 
             return ws.SendStringAsync(data, tok);
         }
@@ -199,7 +226,6 @@ namespace WebSocketExtensions
             Guid connectionId;
             WebSocket webSocket = null;
             WebListenerWebSocketServerBehavior behavior = null;
-
             try
             {
                 int statusCode = 500;
@@ -220,7 +246,7 @@ namespace WebSocketExtensions
 
                 connectionId = Guid.NewGuid();
 
-                webSocket = await requestContext.AcceptWebSocketAsync();
+                webSocket = await requestContext.AcceptWebSocketAsync(null, _keepAlivePingInterval);
 
                 bool clientAdded = _clients.TryAdd(connectionId, webSocket);
                 if (!clientAdded)
@@ -245,14 +271,22 @@ namespace WebSocketExtensions
                 return;
             }
 
+            var stringBehavior = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
+            var binaryBehavior = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
+            bool single = false;
+            var closeBehavior = MakeSafe<WebSocketReceivedResultEventArgs>((r) =>
+            {
+                if (!single)
+                    behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r));
+                single = true;
+            }, "behavior.OnClose");
+
+
+
             try
             {
                 using (webSocket)
                 {
-                    var stringBehavior = MakeSafe<StringMessageReceivedEventArgs>(behavior.OnStringMessage, "behavior.OnStringMessage");
-                    var binaryBehavior = MakeSafe<BinaryMessageReceivedEventArgs>(behavior.OnBinaryMessage, "behavior.OnBinaryMessage");
-                    var closeBehavior = MakeSafe<WebSocketReceivedResultEventArgs>((r) => behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r)), "behavior.OnClose");
-
                     await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, token);
                 }
             }
@@ -265,7 +299,11 @@ namespace WebSocketExtensions
                 requestContext.Dispose();
 
                 bool clientRemoved = _clients.TryRemove(connectionId, out webSocket);
-                if (!clientRemoved)
+                if (clientRemoved)
+                {
+                    closeBehavior(new WebSocketReceivedResultEventArgs(closeStatus: WebSocketCloseStatus.EndpointUnavailable, closeStatDesc: "Removing Client Due to other error"));
+                }
+                else
                 {
                     _logError($"Attempted to remove an existing web socket connection to server for connection id '{connectionId}' that no longer exists.");
                 }

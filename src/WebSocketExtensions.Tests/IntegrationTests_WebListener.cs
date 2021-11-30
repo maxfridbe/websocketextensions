@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Net.Http.Server;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -86,7 +87,12 @@ namespace WebSocketExtensions.Tests
             public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
             public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
             public Action<WebSocketClosedEventArgs> ClosedHandler = (_) => { };
-
+            public Action<Guid, RequestContext> ConnectionEstablished = (a, b) => { };
+            public override void OnConnectionEstablished(Guid connectionId, RequestContext requestContext)
+            {
+                base.OnConnectionEstablished(connectionId, requestContext);
+                ConnectionEstablished(connectionId, requestContext);
+            }
             public override void OnStringMessage(StringMessageReceivedEventArgs e)
             {
                 StringMessageHandler(e);
@@ -99,7 +105,7 @@ namespace WebSocketExtensions.Tests
             {
                 ClosedHandler(e);
             }
-            
+
         }
 
         [Fact]
@@ -221,79 +227,318 @@ namespace WebSocketExtensions.Tests
             var server = new WebListenerWebSocketServer();
             var port = _FreeTcpPort();
 
+
+            Guid _cid = Guid.Empty;
+            bool _serverDisconnected = false;
+            bool _clientDisconnected = false;
+            var connectedTCS = new TaskCompletionSource<bool>();
+            var serverDisconnectTCS = new TaskCompletionSource<bool>();
+            var clientDisconnectTCS = new TaskCompletionSource<bool>();
+
             var beh = new testBeh()
             {
+                ClosedHandler = (h) =>
+                {
+                    if (h.ConnectionId == _cid)
+                    {
+                        serverDisconnectTCS.TrySetResult(true);
+                        _serverDisconnected = true;
+                    }
+                },
+                ConnectionEstablished = (id, ctx) => { _cid = id; connectedTCS.TrySetResult(true); },
+                StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); }
             };
-            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
             var u = $"://localhost:{port}/";
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
-            var closed = false;
             var client = new WebSocketClient()
             {
                 CloseHandler = (c) =>
-                    closed = true
+                {
+                    _clientDisconnected = true;
+                    clientDisconnectTCS.TrySetResult(true);
+                }
             };
             await client.ConnectAsync("ws" + u + "aaa");
 
             //act
-
-            await Task.Delay(100);
-
             client.Dispose();
-            await Task.Delay(100);
+
+            //Assert
+            await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+            Assert.True(_clientDisconnected);
+
+            await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+            Assert.True(_serverDisconnected);
 
             server.Dispose();
-            await Task.Delay(100);
-            //asssert
-            Assert.True(closed);
+
 
         }
 
-
-
         [Fact]
-        public async Task TestServer_ClientDisconnect()
+        public async Task TestServerAbort()
         {
             //arrange
             var server = new WebListenerWebSocketServer();
             var port = _FreeTcpPort();
-            bool disconnected = false;
+
+            Guid _cid = Guid.Empty;
+            bool _serverDisconnected = false;
+            bool _clientDisconnected = false;
+            var connectedTCS = new TaskCompletionSource<bool>();
+            var serverDisconnectTCS = new TaskCompletionSource<bool>();
             var beh = new testBeh()
             {
-                ClosedHandler = (e) => {
-                    disconnected = true;
-
-                }
+                ClosedHandler = (h) =>
+                {
+                    if (h.ConnectionId == _cid)
+                    {
+                        serverDisconnectTCS.TrySetResult(true);
+                        _serverDisconnected = true;
+                    }
+                },
+                ConnectionEstablished = (id, ctx) => { _cid = id; connectedTCS.TrySetResult(true); }
             };
             beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
             var u = $"://localhost:{port}/";
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
-            var closed = false;
+            var clientDisconnectTCS = new TaskCompletionSource<bool>();
+
             var client = new WebSocketClient()
             {
-                CloseHandler = (c) =>
-                    closed = true
+                CloseHandler = (c) => { clientDisconnectTCS.TrySetResult(true); _clientDisconnected = true; }
             };
             await client.ConnectAsync("ws" + u + "aaa");
 
             //act
+            await connectedTCS.Task;
 
-            await Task.Delay(100);
+            server.AbortConnection(_cid);
 
-            client.Dispose();
-            await Task.Delay(100);
+            //Assert;
+            await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+            Assert.True(_serverDisconnected);
 
-            Assert.True(disconnected);
+
+            await Task.WhenAny(Task.Delay(200), clientDisconnectTCS.Task);
+            Assert.True(_clientDisconnected);
+
+            var clients = server.GetActiveConnectionIds();
+            Assert.Empty(clients);
 
             server.Dispose();
-            await Task.Delay(100);
-            //asssert
-            Assert.True(closed);
 
         }
 
+
+        //handled above
+
+        //[Fact]
+        //public async Task TestServer_ClientDisconnect()
+        //{
+        //    //arrange
+        //    var server = new WebListenerWebSocketServer();
+        //    var port = _FreeTcpPort();
+
+        //    Guid _cid = Guid.Empty;
+        //    bool _serverDisconnected = false;
+        //    bool _clientDisconnected = false;
+        //    var connectedTCS = new TaskCompletionSource<bool>();
+        //    var serverDisconnectTCS = new TaskCompletionSource<bool>();
+        //    var clientDisconnectTCS = new TaskCompletionSource<bool>();
+
+        //    var beh = new testBeh()
+        //    {
+        //        ClosedHandler = (h) =>
+        //        {
+        //            if (h.ConnectionId == _cid)
+        //            {
+        //                serverDisconnectTCS.TrySetResult(true);
+        //                _serverDisconnected = true;
+        //            }
+        //        },
+        //        ConnectionEstablished = (id, ctx) => { _cid = id; connectedTCS.TrySetResult(true); },
+        //        StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); }
+        //    };
+        //    var u = $"://localhost:{port}/";
+        //    server.AddRouteBehavior("/aaa", () => beh);
+        //    await server.StartAsync("http" + u);
+
+        //    var client = new WebSocketClient()
+        //    {
+        //        CloseHandler = (c) => { clientDisconnectTCS.TrySetResult(true); _clientDisconnected = true; }
+        //    };
+        //    await client.ConnectAsync("ws" + u + "aaa");
+
+        //    //act
+        //    client.Dispose
+        //    await Task.Delay(100);
+
+        //    client.Dispose();
+        //    await Task.Delay(100);
+
+        //    Assert.True(disconnected);
+
+        //    server.Dispose();
+        //    await Task.Delay(100);
+        //    //asssert
+
+
+        //    await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+        //    Assert.True(_serverDisconnected);
+
+
+        //    await Task.WhenAny(Task.Delay(200), clientDisconnectTCS.Task);
+        //    Assert.True(_clientDisconnected);
+
+        //}
+
+
+
+        [Fact]
+        public async Task TestServer_Client_EXE_DIES()
+        {
+            //arrange
+            var server = new WebListenerWebSocketServer();
+            var port = _FreeTcpPort();
+            Stopwatch sw = null;
+            TimeSpan ts = default(TimeSpan);
+            bool disconnected = false;
+            Guid connid = Guid.Empty;
+            var beh = new testBeh()
+            {
+                ClosedHandler = (e) =>
+                {
+                    if (connid == e.ConnectionId)
+                    {
+                        ts = sw.Elapsed;
+                        disconnected = true;
+
+                    }
+                },
+                ConnectionEstablished = (cid, ctx) =>
+                {
+                    connid = cid;
+                }
+
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+
+            var pid = runClient(port);
+
+            var p = Process.GetProcessById(pid);
+
+            await Task.Delay(1000);//wait a sec send data
+
+            var times = 0;
+            while (times < 100)
+            {
+                await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"hi there {DateTime.Now.Second}"));
+                await Task.Delay(100);
+                times++;
+            }
+            sw = Stopwatch.StartNew();
+            p.Kill();
+
+            while (!disconnected && sw.Elapsed.TotalSeconds < 100)
+            {
+                await Task.Delay(100);
+            }
+
+            Assert.True(disconnected);
+            server.Dispose();
+
+        }
+
+        [Fact(Skip = "only do when you have")]
+        public async Task TestServer_Client_External_NetworkCableDisconnect()
+        {
+            //arrange
+            var server = new WebListenerWebSocketServer();
+            var port = 8883;//_FreeTcpPort();
+            Stopwatch sw = null;
+
+            bool disconnected = false;
+            Guid connid = Guid.Empty;
+            TaskCompletionSource<bool> connectionEstablished = new TaskCompletionSource<bool>();
+            TaskCompletionSource<bool> disconnectedTCS = new TaskCompletionSource<bool>();
+
+            var beh = new testBeh()
+            {
+                ClosedHandler = (e) =>
+                {
+                    if (connid == e.ConnectionId)
+                    {
+                        disconnectedTCS.TrySetResult(true);
+                        disconnected = true;
+
+                    }
+                },
+                ConnectionEstablished = (cid, ctx) =>
+                {
+                    Console.WriteLine("Connected");
+                    connectionEstablished.TrySetResult(true);
+                    connid = cid;
+                }
+
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://+:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            await connectionEstablished.Task;
+            await Task.Delay(1000);//wait a sec send data
+
+            var times = 0;
+            while (times < 1000 || !disconnected)
+            {
+                try
+                {
+                    await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"ServerTime: {DateTime.Now.ToLongTimeString()}"));
+                }
+                catch
+                {
+                    break;
+                }
+                await Task.Delay(100);
+                times++;
+            }
+            sw = Stopwatch.StartNew();
+
+
+            await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(6)), disconnectedTCS.Task);
+            var time = sw.Elapsed;
+
+            Assert.True(disconnected);
+            server.Dispose();
+
+        }
+
+        private int runClient(int port)
+        {
+            var exePath = AppDomain.CurrentDomain.BaseDirectory;
+            var exeName = AppDomain.CurrentDomain.FriendlyName;
+            var assemblyName = exeName.Substring(0, exeName.Length - 4);
+
+            string callingArgs = $"\"{exePath}..\\..\\..\\..\\ClientTest\\bin\\Debug\\netcoreapp2.2\\ClientTest.dll\" {port.ToString().Trim()}";
+
+            var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("dotnet", callingArgs)
+                {
+                    UseShellExecute = true
+                }
+            };
+
+            p.Start();
+
+            return p.Id;
+        }
 
 
 
@@ -456,7 +701,7 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        public async Task TestCreateServerClient_connect_recv_echo_twice ()
+        public async Task TestCreateServerClient_connect_recv_echo_twice()
         {
             //arrange
             var server = new WebListenerWebSocketServer();
@@ -469,10 +714,10 @@ namespace WebSocketExtensions.Tests
             {
                 //try
                 //{
-                    var data = e.Data;
-                    Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
-                    Task.Run(() => e.WebSocket.SendStringAsync(data +  data, CancellationToken.None).GetAwaiter().GetResult());
-                    //await Task.Delay(1000);
+                var data = e.Data;
+                Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                Task.Run(() => e.WebSocket.SendStringAsync(data + data, CancellationToken.None).GetAwaiter().GetResult());
+                //await Task.Delay(1000);
                 //}
                 //catch (Exception o)
                 //{
@@ -498,12 +743,12 @@ namespace WebSocketExtensions.Tests
             {
                 tasks.Add(Task.Run(() =>
                 {
-                   // try
-                   // {
-                        client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
-                  //  }
-                  //  catch (Exception e) {
-                  //  }
+                    // try
+                    // {
+                    client.SendStringAsync("hi" + i.ToString(), CancellationToken.None).GetAwaiter().GetResult();
+                    //  }
+                    //  catch (Exception e) {
+                    //  }
                 }));
 
             }
@@ -512,7 +757,7 @@ namespace WebSocketExtensions.Tests
 
             //assert
             //Assert.Equal("hi", t1.res);
-            
+
         }
 
 
@@ -588,7 +833,7 @@ namespace WebSocketExtensions.Tests
             var clients = server.GetActiveConnectionIds();
             Guid oldConnectionId = clients.First();
 
-            for (int i=0; i < 100; i++)
+            for (int i = 0; i < 100; i++)
             {
                 var newClient = new WebSocketClient()
                 {
@@ -652,21 +897,23 @@ namespace WebSocketExtensions.Tests
             {
             };
             bool exceptionoccured = false;
-            beh.StringMessageHandler = (e) => {
+            beh.StringMessageHandler = (e) =>
+            {
                 if (exceptionoccured)
                 {
                     e.WebSocket.SendStringAsync("hihi");
                     return;
                 }
                 exceptionoccured = true;
-                throw new Exception("arghhh"); };
+                throw new Exception("arghhh");
+            };
 
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync($"http://localhost:{port}/");
 
             var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
-            
+
             //act
             await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
 

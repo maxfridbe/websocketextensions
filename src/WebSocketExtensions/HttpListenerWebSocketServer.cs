@@ -217,7 +217,7 @@ namespace WebSocketExtensions
             {
                 int statusCode = 500;
                 var statusDescription = "BadContext";
-
+                
                 behavior = behaviorBuilder();
                 
                 if (!behavior.OnValidateContext(webSocketContext, ref statusCode, ref statusDescription))
