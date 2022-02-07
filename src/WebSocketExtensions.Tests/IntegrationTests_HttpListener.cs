@@ -145,7 +145,7 @@ namespace WebSocketExtensions.Tests
                     }
                     catch (Exception e1)
                     {
-
+                        Console.Write(e1.ToString());
                     }
                 });
                 Task.Run(async () =>
@@ -157,7 +157,7 @@ namespace WebSocketExtensions.Tests
                     }
                     catch (Exception e2)
                     {
-
+                        Console.Write(e2.ToString());
                     }
                 });
             };
@@ -609,8 +609,8 @@ namespace WebSocketExtensions.Tests
             await Task.Delay(100);
 
 
-            Assert.Equal(true, exceptionoccured);
-            Assert.Equal(client.State, WebSocketState.Open);
+            Assert.True(exceptionoccured);
+            Assert.Equal(WebSocketState.Open, client.State);
             var byt = new byte[2000];
             await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
 
