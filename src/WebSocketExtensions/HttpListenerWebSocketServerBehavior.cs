@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using System.Net.WebSockets;
+using System.Net;
 
 namespace WebSocketExtensions
 {
@@ -8,8 +8,8 @@ namespace WebSocketExtensions
     {
         public DateTime StartTime { get; } = DateTime.UtcNow;
 
-        public virtual void OnConnectionEstablished(Guid connectionId, WebSocketContext webSocketContext) { }
-        public virtual bool OnValidateContext(WebSocketContext webSocketContext, ref int errStatusCode, ref string statusDescription) { return true; }
+        public virtual void OnConnectionEstablished(Guid connectionId, HttpListenerContext listenerContext) { }
+        public virtual bool OnValidateContext(HttpListenerContext listenerContext, ref int errStatusCode, ref string statusDescription) { return true; }
         public virtual void OnStringMessage(StringMessageReceivedEventArgs e) { }
         public virtual void OnBinaryMessage(BinaryMessageReceivedEventArgs e) { }
         public virtual void OnClose(WebSocketClosedEventArgs e) { }

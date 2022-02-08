@@ -214,7 +214,6 @@ namespace WebSocketExtensions
                 {
                     _logError(e.ToString());
                 }
-
             }
 
             _logInfo($"Listening loop stopped.");
@@ -280,8 +279,6 @@ namespace WebSocketExtensions
                     behavior.OnClose(new WebSocketClosedEventArgs(connectionId, r));
                 single = true;
             }, "behavior.OnClose");
-
-
 
             try
             {

@@ -34,7 +34,7 @@ namespace WebSocketExtensions
             {
                 ss.Wait();
             }
-            catch (ArgumentNullException e)
+            catch (ArgumentNullException)
             {
                 //disposed of while wait
             }
