@@ -9,6 +9,7 @@ using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
+using WebSocketExtensions;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -55,6 +56,8 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
+                [Obsolete]
+
         public void TestCreateServer()
         {
             //arrange
@@ -67,6 +70,9 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
+
+                [Obsolete]
+
         public async Task TestCreateServer_start()
         {
             //arrange
@@ -86,6 +92,9 @@ namespace WebSocketExtensions.Tests
             public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
             public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
 
+            public Action<WebSocketClosedEventArgs> ClosedHandler = (_) => { };
+            public Action<Guid, HttpListenerContext> ConnectionEstablished = (_, _) => { };
+
             public override void OnStringMessage(StringMessageReceivedEventArgs e)
             {
                 StringMessageHandler(e);
@@ -94,9 +103,19 @@ namespace WebSocketExtensions.Tests
             {
                 BinaryMessageHandler(e);
             }
+            public override void OnClose(WebSocketClosedEventArgs e)
+            {
+                base.OnClose(e);
+            }
+            public override void OnConnectionEstablished(Guid connectionId, HttpListenerContext listenerContext)
+            {
+                ConnectionEstablished(connectionId, listenerContext);
+            }
         }
 
         [Fact]
+                [Obsolete]
+
         public async Task TestCreateServer_connect()
         {
             //arrange
@@ -120,6 +139,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestMemLeak()
         {
 
@@ -173,9 +194,9 @@ namespace WebSocketExtensions.Tests
                 using (var client = new WebSocketClient())
                 {
                     client.MessageHandler = (e) => res = e.Data;
-                  
-                        await client.ConnectAsync($"ws://localhost:{port}/aaa");
-                     
+
+                    await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
                     _output.WriteLine($"Connect {i}");
                     await client.SendStringAsync("hi" + i.ToString(), CancellationToken.None);
                     _output.WriteLine($"Disconnect {i}");
@@ -207,11 +228,13 @@ namespace WebSocketExtensions.Tests
         {
             long totalsize = 0;
             foreach (var aProc in Process.GetProcesses())
-                totalsize += aProc.WorkingSet64 / 1024l;
+                totalsize += aProc.WorkingSet64 / 1024L;
             return totalsize;
         }
 
         [Fact]
+        [Obsolete]
+
         public async Task TestCreateServer_connect_recv_text()
         {
             //arrange
@@ -239,6 +262,70 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
+        [Obsolete]
+
+        public async Task TestServerAbort()
+        {
+            //arrange
+            var server = new HttpListenerWebSocketServer();
+            var port = _FreeTcpPort();
+
+            Guid _cid = Guid.Empty;
+            bool _serverDisconnected = false;
+            bool _clientDisconnected = false;
+            var connectedTCS = new TaskCompletionSource<bool>();
+            var serverDisconnectTCS = new TaskCompletionSource<bool>();
+            var beh = new testBeh()
+            {
+                ClosedHandler = (h) =>
+                {
+                    if (h.ConnectionId == _cid)
+                    {
+                        serverDisconnectTCS.TrySetResult(true);
+                        _serverDisconnected = true;
+                    }
+                },
+                ConnectionEstablished = (id, ctx) =>
+                {
+                    _cid = id;
+                    connectedTCS.TrySetResult(true);
+                }
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+            var clientDisconnectTCS = new TaskCompletionSource<bool>();
+
+            var client = new WebSocketClient()
+            {
+                CloseHandler = (c) => { clientDisconnectTCS.TrySetResult(true); _clientDisconnected = true; }
+            };
+            await client.ConnectAsync("ws" + u + "aaa");
+
+            //act
+            await connectedTCS.Task;
+
+            server.AbortConnection(_cid);
+
+            //Assert;
+            await Task.WhenAny(Task.Delay(6800), serverDisconnectTCS.Task);
+            Assert.True(_serverDisconnected);
+
+
+            await Task.WhenAny(Task.Delay(800), clientDisconnectTCS.Task);
+            Assert.True(_clientDisconnected);
+
+            var clients = server.GetActiveConnectionIds();
+            Assert.Empty(clients);
+
+            server.Dispose();
+
+        }
+
+        [Fact]
+        [Obsolete]
+
         public async Task TestCreateServer_connect_recv_echo()
         {
             //arrange
@@ -268,8 +355,108 @@ namespace WebSocketExtensions.Tests
 
         }
 
+        [Fact]
+        [Obsolete]
+
+        public async Task TestServer_Client_External_ExeDies()
+        {
+            //arrange
+            var server = new HttpListenerWebSocketServer();
+            var port = 8883;//_FreeTcpPort();
+            Stopwatch sw = null;
+
+            bool disconnected = false;
+            Guid connid = Guid.Empty;
+            TaskCompletionSource<bool> connectionEstablished = new TaskCompletionSource<bool>();
+            TaskCompletionSource<bool> disconnectedTCS = new TaskCompletionSource<bool>();
+
+            var beh = new testBeh()
+            {
+                ClosedHandler = (e) =>
+                {
+                    if (connid == e.ConnectionId)
+                    {
+                        disconnectedTCS.TrySetResult(true);
+                        disconnected = true;
+
+                    }
+                },
+                ConnectionEstablished = (cid, ctx) =>
+                {
+                    Console.WriteLine("Connected");
+                    connid = cid;
+
+                    connectionEstablished.TrySetResult(true);
+                }
+
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            var u = $"://localhost:{port}/";
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync("http" + u);
+
+
+            var pid = runClient(port);
+
+            var p = Process.GetProcessById(pid);
+
+            await connectionEstablished.Task;
+
+
+            var times = 0;
+            while (times < 1000 || !disconnected)
+            {
+                if (times == 10)
+                    p.Kill();
+                try
+                {
+                    await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"ServerTime: {DateTime.Now.ToLongTimeString()}"));
+                }
+                catch
+                {
+                    break;
+                }
+                await Task.Delay(100);
+                times++;
+            }
+            sw = Stopwatch.StartNew();
+
+
+            await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(6)), disconnectedTCS.Task);
+            var time = sw.Elapsed;
+
+            Assert.True(disconnected);
+            server.Dispose();
+
+        }
+        private int runClient(int port)
+        {
+            var exePath = AppDomain.CurrentDomain.BaseDirectory;
+            var exeName = AppDomain.CurrentDomain.FriendlyName;
+            var assemblyName = exeName.Substring(0, exeName.Length - 4);
+            var exep = $"{exePath}../../../../ClientTest/bin/Debug/net6.0/ClientTest.dll";
+            var fullp = Path.GetFullPath(exep);
+            Assert.True(File.Exists(fullp));
+            string callingArgs = $"\"{fullp}\" {port.ToString().Trim()}";
+
+            var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("dotnet", callingArgs)
+                {
+                    UseShellExecute = true
+                }
+            };
+
+            p.Start();
+
+            return p.Id;
+        }
+
+
 
         [Fact]
+        [Obsolete]
+
         public async Task TestServerDispose()
         {
             //arrange
@@ -305,6 +492,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+        [Obsolete]
+
         public async Task TestClientDispose()
         {
             //arrange
@@ -342,6 +531,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestClientDisposeReconnect()
         {
             //arrange
@@ -382,6 +573,7 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
+                [Obsolete]
         public async Task TestCreateServerClient_connect_recv_echo()
         {
             //arrange
@@ -418,6 +610,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestCreateServerClient_connect_recv_echo_twice()
         {
             //arrange
@@ -479,6 +673,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestCreateServerClient_LargeFile()
         {
             //arrange
@@ -517,6 +713,9 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+
+                [Obsolete]
+
         public async Task TestCreateServerClient_connect_2_boot_1()
         {
             //arrange
@@ -576,6 +775,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestCreateServer_connect_recv_echo_exception()
         {
             //arrange
@@ -626,6 +827,8 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
+                [Obsolete]
+
         public async Task TestCreateServerClient_LoadThrottling()
         {
             //arrange
