@@ -11,7 +11,8 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-    //## The Server class        
+    //## The Server class    
+    [Obsolete("Use KestrelWebSocketServer from WebSocketExtensions.Kestrel")]
     public class WebListenerWebSocketServer : WebSocketReciever, IDisposable
     {
         private ConcurrentDictionary<Guid, WebSocket> _clients;
@@ -49,15 +50,16 @@ namespace WebSocketExtensions
             return _webListener.IsListening;
         }
 
-        public void AbortConnection(Guid connectionid)
+        public Task AbortConnection(Guid connectionid)
         {
             WebSocket ws = null;
             if (!_clients.TryGetValue(connectionid, out ws))
             {
-                return;
+                return Task.CompletedTask;
             }
+            return ws.CloseAsync(WebSocketCloseStatus.NormalClosure,"Abort Connection", CancellationToken.None);
 
-            ws.Abort();
+            //ws.Abort();
         }
 
         public Task DisconnectConnection(Guid connectionid, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)

@@ -1,6 +1,11 @@
 ﻿using System;
+using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using WebSocketExtensions;
+using WebSocketExtensions.Kestrel;
 
 namespace ConsoleApp1
 {
@@ -11,15 +16,40 @@ namespace ConsoleApp1
     {
         static void Main(string[] args)
         {
-            var server = new HttpListenerWebSocketServer((s, err) => Console.WriteLine(s));
+            var loggerFactory = LoggerFactory.Create(loggingBuilder => loggingBuilder
+                                .SetMinimumLevel(LogLevel.Trace)
+                                .AddConsole());
+
+            ILogger logger = loggerFactory.CreateLogger<Program>();
+
+
+            var server = new KestrelWebSocketServer(logger);
             server.AddRouteBehavior("/aaa", () => { return new test(); });
-            server.StartAsync("http://localhost:8080/");
+            server.StartAsync("http://127.0.0.1:8008");
+            bool running = false;
+
+            Task.Factory.StartNew(async () =>
+            {
+                Console.WriteLine("Connecting");
+                var c = new ClientWebSocket();
+                await c.ConnectAsync(new Uri($"ws://127.0.0.1:8008/aaa"), CancellationToken.None);
+                running = true;
+                while (running)
+                {
+                    Console.WriteLine("Sending");
+                    await c.SendBytesAsync(Encoding.UTF8.GetBytes("hi"));
+                    await Task.Delay(3000);
+                }
+
+            });
             Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+            Console.ReadLine();
+            running = false;
+            server.Dispose();
         }
     }
 
-    public class test : HttpListenerWebSocketServerBehavior
+    public class test : KestrelWebSocketServerBehavior
     {
         public override void OnBinaryMessage(BinaryMessageReceivedEventArgs e)
         {

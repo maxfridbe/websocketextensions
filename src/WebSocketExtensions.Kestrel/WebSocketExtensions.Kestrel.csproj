@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <TargetFrameworks>net6.0</TargetFrameworks>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net, A drop in replacement for WebSocketSharp, Has implementations using HttpListener and WebListener and Kestrel</Description>
+    <Authors>Max Fridberg</Authors>
+    <Company />
+    <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
+    <PackageTags>WebSocket Kestrel Extensions</PackageTags>
+    <PackageProjectUrl>https://github.com/maxfridbe/websocketextensions</PackageProjectUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/maxfridbe/websocketextensions/master/websocket.png</PackageIconUrl>
+    <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
+    <Version>2.6.0.0</Version>
+    <AssemblyVersion>2.6.0.0</AssemblyVersion>
+    <FileVersion>2.6.0.0</FileVersion>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
+    <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.WebSockets" Version="2.2.1" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\WebSocketExtensions\WebSocketExtensions.csproj" />
+  </ItemGroup>
+</Project>

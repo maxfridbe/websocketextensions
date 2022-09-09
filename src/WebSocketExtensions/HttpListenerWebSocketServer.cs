@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 namespace WebSocketExtensions
 {
     //## The Server class        
+    [Obsolete("Use KestrelWebSocketServer from WebSocketExtensions.Kestrel")]
     public class HttpListenerWebSocketServer : WebSocketReciever, IDisposable
     {
         private ConcurrentDictionary<Guid, WebSocket> _clients;
@@ -23,16 +24,19 @@ namespace WebSocketExtensions
         private int _connectedClientCount = 0;
         private readonly long _queueThrottleLimit;
         private readonly TimeSpan _keepAlivePingInterval;
+        private bool _enablePingResponse = false;
         private bool _isDisposing = false;
 
         public HttpListenerWebSocketServer(Action<string, bool> logger = null,
             long queueThrottleLimitBytes = long.MaxValue,
-            int keepAlivePingIntervalS = 30) : base(logger)
+            int keepAlivePingIntervalS = 30,
+            bool enablePingResponse = false) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<HttpListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
             _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
+            _enablePingResponse = enablePingResponse;
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -48,15 +52,16 @@ namespace WebSocketExtensions
             return _httpListener.IsListening;
         }
 
-        public void AbortConnection(Guid connectionid)
+        public Task AbortConnection(Guid connectionid)
         {
             WebSocket ws = null;
             if (!_clients.TryGetValue(connectionid, out ws))
             {
-                return;
+                return Task.CompletedTask;
             }
+            return ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Abort Connection", CancellationToken.None);
 
-            ws.Abort();
+            //ws.Abort();
         }
 
         public Task DisconnectConnection(Guid connectionId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
@@ -192,6 +197,13 @@ namespace WebSocketExtensions
                     Func<HttpListenerWebSocketServerBehavior> builder = null;
                     if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
                     {
+                        if (_enablePingResponse && listenerContext.Request.RawUrl.Contains("/ping_ms"))
+                        {
+                            listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
+
+                            listenerContext.Response.Close();
+                        }
+
                         _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");
                         listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
                         listenerContext.Response.Abort();
@@ -229,9 +241,9 @@ namespace WebSocketExtensions
             {
                 int statusCode = 500;
                 var statusDescription = "BadContext";
-                
+
                 behavior = behaviorBuilder();
-                
+
                 if (!behavior.OnValidateContext(listenerContext, ref statusCode, ref statusDescription))
                 {
                     listenerContext.Response.StatusDescription = statusDescription;

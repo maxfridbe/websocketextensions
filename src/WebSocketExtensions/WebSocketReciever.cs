@@ -6,7 +6,7 @@ namespace WebSocketExtensions
     {
         internal readonly Action<string, bool> _logger;
 
-        internal WebSocketReciever(Action<string, bool> logger)
+        public WebSocketReciever(Action<string, bool> logger)
         {
             _logger = logger;
         }

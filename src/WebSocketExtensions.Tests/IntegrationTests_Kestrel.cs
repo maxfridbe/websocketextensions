@@ -4,23 +4,26 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Net.Http.Server;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using WebSocketExtensions.Kestrel;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace WebSocketExtensions.Tests
 {
-    public class IntegrationTests_WebListener
+    public class IntegrationTests_Kestrel
     {
         private ITestOutputHelper _output;
 
-        public IntegrationTests_WebListener(ITestOutputHelper output)
+        public IntegrationTests_Kestrel(ITestOutputHelper output)
         {
             _output = output;
         }
@@ -32,6 +35,16 @@ namespace WebSocketExtensions.Tests
             int port = ((IPEndPoint)l.LocalEndpoint).Port;
             l.Stop();
             return port;
+        }
+        static ILogger _loggerFac()
+        {
+
+            var loggerFactory = LoggerFactory.Create(loggingBuilder => loggingBuilder
+                                .SetMinimumLevel(LogLevel.Trace)
+                                .AddConsole());
+
+            ILogger logger = loggerFactory.CreateLogger<IntegrationTests_Kestrel>();
+            return logger;
         }
 
 
@@ -56,27 +69,25 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-                [Obsolete]
-
         public void TestCreateServer()
         {
             //arrange
 
             //act
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+            var server = new KestrelWebSocketServer(logger);
 
             //assert
 
         }
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServer_start()
         {
             //arrange
             var port = _FreeTcpPort();
-            using (var server = new WebListenerWebSocketServer())
+            var logger = _loggerFac();
+            using (var server = new KestrelWebSocketServer(logger))
             {
 
                 //act
@@ -86,17 +97,24 @@ namespace WebSocketExtensions.Tests
             }
 
         }
-        public class testBeh : WebListenerWebSocketServerBehavior
+        public class testBeh : KestrelWebSocketServerBehavior
         {
             public Action<StringMessageReceivedEventArgs> StringMessageHandler = (_) => { };
             public Action<BinaryMessageReceivedEventArgs> BinaryMessageHandler = (_) => { };
             public Action<WebSocketClosedEventArgs> ClosedHandler = (_) => { };
-            public Action<Guid, RequestContext> ConnectionEstablished = (a, b) => { };
-            public override void OnConnectionEstablished(Guid connectionId, RequestContext requestContext)
+
+            public testBeh()
+            {
+            }
+
+            public override void OnConnectionEstablished(Guid connectionId, HttpContext requestContext)
             {
                 base.OnConnectionEstablished(connectionId, requestContext);
                 ConnectionEstablished(connectionId, requestContext);
             }
+
+            public Action<Guid, HttpContext> ConnectionEstablished { get; set; }
+
             public override void OnStringMessage(StringMessageReceivedEventArgs e)
             {
                 StringMessageHandler(e);
@@ -113,12 +131,11 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-                [Obsolete]
-
         public async Task TestCreateServer_connect()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             server.AddRouteBehavior("/aaa", () => new testBeh());
@@ -135,12 +152,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServer_connect_recv_text()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             string data = null;
             var port = _FreeTcpPort();
 
@@ -164,12 +181,11 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServer_connect_recv_echo()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -197,12 +213,42 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
+        public async Task TestCreateServer_connect_ping()
+        {
+            //arrange
+            var logger = _loggerFac();
+            var server = new KestrelWebSocketServer(logger, httpPingResponseRoute: "/ping_ms");
+            var port = _FreeTcpPort();
 
+            var beh = new testBeh()
+            {
+            };
+            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            var httpc = new HttpClient();
+            httpc.BaseAddress = new Uri($"http://localhost:{port}");
+
+
+            //act
+            var res = await httpc.GetAsync("/ping_ms");
+
+            //assert
+            Assert.Equal(HttpStatusCode.OK,res.StatusCode);
+
+        }
+
+
+        [Fact]
         public async Task TestServerDispose()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -233,12 +279,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestClientDispose()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
 
@@ -291,12 +337,11 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-        [Obsolete]
-
         public async Task TestServerAbort()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             Guid _cid = Guid.Empty;
@@ -331,30 +376,162 @@ namespace WebSocketExtensions.Tests
             //act
             await connectedTCS.Task;
 
-            await server.AbortConnection(_cid);
+           await server.AbortConnectionAsync(_cid,CancellationToken.None);//.DisconnectConnection(_cid,"justcause");
 
             //Assert;
-            await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+            await Task.WhenAny(Task.Delay(800), serverDisconnectTCS.Task);
             Assert.True(_serverDisconnected);
 
 
-            await Task.WhenAny(Task.Delay(200), clientDisconnectTCS.Task);
+            await Task.WhenAny(Task.Delay(800), clientDisconnectTCS.Task);
             Assert.True(_clientDisconnected);
 
             var clients = server.GetActiveConnectionIds();
+            await Task.Delay(200);
             Assert.Empty(clients);
 
             server.Dispose();
 
         }
 
-        [Fact]
-        [Obsolete]
 
+        //handled above
+
+        //[Fact]
+        //public async Task TestServer_ClientDisconnect()
+        //{
+        //    //arrange
+        //    var server = new KestrelWebSocketServer(logger);
+        //    var port = _FreeTcpPort();
+
+        //    Guid _cid = Guid.Empty;
+        //    bool _serverDisconnected = false;
+        //    bool _clientDisconnected = false;
+        //    var connectedTCS = new TaskCompletionSource<bool>();
+        //    var serverDisconnectTCS = new TaskCompletionSource<bool>();
+        //    var clientDisconnectTCS = new TaskCompletionSource<bool>();
+
+        //    var beh = new testBeh()
+        //    {
+        //        ClosedHandler = (h) =>
+        //        {
+        //            if (h.ConnectionId == _cid)
+        //            {
+        //                serverDisconnectTCS.TrySetResult(true);
+        //                _serverDisconnected = true;
+        //            }
+        //        },
+        //        ConnectionEstablished = (id, ctx) => { _cid = id; connectedTCS.TrySetResult(true); },
+        //        StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); }
+        //    };
+        //    var u = $"://localhost:{port}/";
+        //    server.AddRouteBehavior("/aaa", () => beh);
+        //    await server.StartAsync("http" + u);
+
+        //    var client = new WebSocketClient()
+        //    {
+        //        CloseHandler = (c) => { clientDisconnectTCS.TrySetResult(true); _clientDisconnected = true; }
+        //    };
+        //    await client.ConnectAsync("ws" + u + "aaa");
+
+        //    //act
+        //    client.Dispose
+        //    await Task.Delay(100);
+
+        //    client.Dispose();
+        //    await Task.Delay(100);
+
+        //    Assert.True(disconnected);
+
+        //    server.Dispose();
+        //    await Task.Delay(100);
+        //    //asssert
+
+
+        //    await Task.WhenAny(Task.Delay(200), serverDisconnectTCS.Task);
+        //    Assert.True(_serverDisconnected);
+
+
+        //    await Task.WhenAny(Task.Delay(200), clientDisconnectTCS.Task);
+        //    Assert.True(_clientDisconnected);
+
+        //}
+
+
+
+        //[Fact]
+        //public async Task TestServer_Client_EXE_DIES()
+        //{
+        //    //arrange
+        //    var server = new KestrelWebSocketServer(logger);
+        //    var port = _FreeTcpPort();
+        //    Stopwatch sw = null;
+        //    TimeSpan ts = default(TimeSpan);
+        //    bool disconnected = false;
+        //    Guid connid = Guid.Empty;
+        //    var beh = new testBeh()
+        //    {
+        //        ClosedHandler = (e) =>
+        //        {
+        //            if (connid == e.ConnectionId)
+        //            {
+        //                ts = sw.Elapsed;
+        //                disconnected = true;
+
+        //            }
+        //        },
+        //        ConnectionEstablished = (cid, ctx) =>
+        //        {
+        //            connid = cid;
+        //        }
+
+        //    };
+        //    beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+        //    var u = $"://localhost:{port}/";
+        //    server.AddRouteBehavior("/aaa", () => beh);
+        //    await server.StartAsync("http" + u);
+
+        //    var pid = runClient(port);
+
+        //    var p = Process.GetProcessById(pid);
+
+        //    await Task.Delay(1000);//wait a sec send data
+
+        //    var times = 0;
+        //    while (times < 100)
+        //    {
+        //        try
+        //        {
+        //            await server.SendBytesAsync(connid, Encoding.UTF8.GetBytes($"hi there {DateTime.Now.Second}"));
+        //        }
+        //        catch
+        //        {
+        //            break;
+        //        }
+        //        await Task.Delay(100);
+        //        times++;
+        //    }
+        //    sw = Stopwatch.StartNew();
+        //    p.Kill();
+
+        //    while (!disconnected && sw.Elapsed.TotalSeconds < 100)
+        //    {
+        //        await Task.Delay(100);
+        //    }
+
+        //    Assert.True(disconnected);
+        //    server.Dispose();
+
+        //}
+
+
+        [Fact]
         public async Task TestServer_Client_External_ExeDies()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = 8883;//_FreeTcpPort();
             Stopwatch sw = null;
 
@@ -425,12 +602,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact(Skip = "only do when you have")]
-        [Obsolete]
-
         public async Task TestServer_Client_External_NetworkCableDisconnect()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = 8883;//_FreeTcpPort();
             Stopwatch sw = null;
 
@@ -518,14 +695,14 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestMemLeak()
         {
 
             //arrange
             //var server = new HttpListenerWebSocketServer();
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             //var beh = new testBeh()
@@ -600,12 +777,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestClientDisposeReconnect()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -642,12 +819,12 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServerClient_connect_recv_echo()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -680,12 +857,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServerClient_connect_recv_echo_twice()
         {
+            var logger = _loggerFac();
+
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -743,12 +920,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServerClient_LargeFile()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -783,12 +960,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
-
         public async Task TestCreateServerClient_connect_2_boot_1()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -872,11 +1049,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-        [Obsolete]
         public async Task TestCreateServer_connect_recv_echo_exception()
         {
             //arrange
-            var server = new WebListenerWebSocketServer();
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -923,12 +1101,12 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-                [Obsolete]
-
         public async Task TestCreateServerClient_LoadThrottling()
         {
             //arrange
-            var server = new WebListenerWebSocketServer(queueThrottleLimitBytes: 200L * 1024 * 1024);// 
+            var logger = _loggerFac();
+
+            var server = new KestrelWebSocketServer(logger, queueThrottleLimitBytes: 200L * 1024 * 1024);// 
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
