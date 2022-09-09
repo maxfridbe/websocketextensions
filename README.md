@@ -20,8 +20,9 @@ Defines WebSocket extensions to microsoft WebSocket implementation to bring it i
     - Most not touched in forever
 ---
 ## This Nuget Package (websocketextensions) defines
-- HttpListenerWebSocketServer (for http.sys)
-- WebListenerWebSocketServer (for core)
+- KestrelWebSocketServer (for kestrel)
+- HttpListenerWebSocketServer [Obsolete] (for http.sys (linux + windows) for now)
+- WebListenerWebSocketServer [Obsolete] (for windows http.sys)
 - WebSocketClient
 - Extension Methods to WebSocket which allow for things like SendStream
 
