@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -355,7 +356,7 @@ namespace WebSocketExtensions.Tests
         {
             //arrange
             var server = new WebListenerWebSocketServer();
-            var port = 8883;//_FreeTcpPort();
+            var port = 4569;//_FreeTcpPort();
             Stopwatch sw = null;
 
             bool disconnected = false;
@@ -785,7 +786,7 @@ namespace WebSocketExtensions.Tests
         [Fact]
         [Obsolete]
 
-        public async Task TestCreateServerClient_connect_2_boot_1()
+        public async Task TestCreateServerClient_connect_100_boot_1()
         {
             //arrange
             var server = new WebListenerWebSocketServer();
@@ -839,7 +840,7 @@ namespace WebSocketExtensions.Tests
 
                 await Task.Delay(100);
                 newClients = server.GetActiveConnectionIds();
-                Assert.Equal(1, newClients.Count);
+                Assert.Single(newClients);
                 Assert.Equal(newConnectionId, newClients.First());
 
                 //Verify that new client still works
@@ -952,14 +953,20 @@ namespace WebSocketExtensions.Tests
 
             //act
             var s = _getFile("tst2", 10);
-
+            var b = File.ReadAllBytes(s);
             for (int i = 0; i < 400; i++)
             {
-                await client.SendStreamAsync(File.OpenRead(s));
+                try
+                {
+                    await client.SendBytesAsync(b);
+                }catch(Exception e){
+                    throw;
+                }
                 await Task.Delay(1);
             }
 
             //assert
+            await Task.Delay(100);
         }
     }
 }

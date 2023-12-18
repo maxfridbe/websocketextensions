@@ -25,12 +25,11 @@ namespace WebSocketExtensions
         public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                throw new Exception("Websocket is null");
+                throw new Exception("SendStreamAsync:Websocket is null");
 
             if (ws.State != WebSocketState.Open)
             {
-                ws.CleanupSendMutex();
-                throw new Exception("Websocket not open.");
+                throw new Exception("SendStreamAsync: Websocket not open.");
             }
 
           
@@ -76,17 +75,18 @@ namespace WebSocketExtensions
         public static async Task SendCloseAsync(this WebSocket ws, WebSocketCloseStatus stat, string msg, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                throw new Exception("Websocket is null");
+                throw new Exception("SendCloseAsync: Websocket is null");
+
+            if (ws.State != WebSocketState.Open)
+            {
+                throw new Exception("SendCloseAsync: Websocket not open.");
+            }
 
             await _locker.EnterLockAsync(ws,tok);
 
             try
             {
                 await ws.CloseAsync(stat, msg, tok);
-            }
-            catch (Exception ex)
-            {
-                throw ex;
             }
             finally
             {
@@ -97,15 +97,13 @@ namespace WebSocketExtensions
         public static async Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                throw new Exception("Websocket is null");
+                throw new Exception("SendBytesAsync: Websocket is null");
 
             if (ws.State != WebSocketState.Open)
             {
-                ws.CleanupSendMutex();
-                throw new Exception("Websocket not open.");
+                throw new Exception("SendBytesAsync: Websocket not open.");
             }
 
-            //_locker.EnterLock(ws);
             await _locker.EnterLockAsync(ws, tok);
 
             try
@@ -122,15 +120,13 @@ namespace WebSocketExtensions
         public static async Task SendStringAsync(this WebSocket ws, string data, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                throw new Exception("Websocket is null");
+                throw new Exception("SendStringAsync: Websocket is null");
 
             if (ws.State != WebSocketState.Open)
             {
-                ws.CleanupSendMutex();
-                throw new Exception("Websocket not open.");
+                throw new Exception("SendStringAsync: Websocket not open.");
             }
 
-            //_locker.EnterLock(ws);
             await _locker.EnterLockAsync(ws, tok);
             try
             {

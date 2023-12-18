@@ -22,7 +22,7 @@ namespace WebSocketExtensions.Playground.Framework
 
         static async Task MainAsync(string[] args)
         {
-            var server = new WebListenerWebSocketServer((string a, bool b) => { Console.WriteLine(a); });
+            var server = new WebListenerWebSocketServer((string a, bool b) => { Console.WriteLine(a); }, 200L * 1024 * 1024);
             var port = _FreeTcpPort();
 
             var beh = new testBeh()
@@ -61,12 +61,25 @@ namespace WebSocketExtensions.Playground.Framework
                         await Task.Delay(375);
                     }
                 });
+
+                Task.Run(async () =>
+                {
+                    while (true)
+                    {
+                        byte[] buffer = Encoding.UTF8.GetBytes($"Do the thing!");
+
+                        // Send the message using SendAsync  
+                        await server.SendBytesAsync(a, buffer);
+
+                        await Task.Delay(888);
+                    }
+                });
             };
 
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync($"http://localhost:{port}/");
 
-            var s = _getFile("tst", 1);
+            var s = _getFile("tst", 10);
             var bytes = File.ReadAllBytes(s);
 
             var client = new WebSocketClient((string a, bool b) => { Console.WriteLine(a); })
@@ -79,7 +92,7 @@ namespace WebSocketExtensions.Playground.Framework
                 await client.SendBytesAsync(bytes);
                 Interlocked.Increment(ref sent);
                 Console.WriteLine($"Sent {sent}");
-                await Task.Delay(200);
+                await Task.Delay(100);
             };
 
             await client.ConnectAsync($"ws://localhost:{port}/aaa");

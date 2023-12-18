@@ -118,7 +118,7 @@ namespace WebSocketExtensions
 
             _cancellationTokenSource = new CancellationTokenSource();
             _webListener = new WebListener();
-            //_webListener.Settings.Timeouts.IdleConnection = TimeSpan.FromHours(1);
+           // _webListener.Settings.Timeouts.IdleConnection = TimeSpan.FromHours(1);
             _webListener.Settings.UrlPrefixes.Add(listenerPrefix);
             _webListener.Start();
             _logInfo($"Listener started on {listenerPrefix}.");
