@@ -31,7 +31,12 @@ namespace WebSocketExtensions
         public async Task ConnectAsync(string url, CancellationToken tok = default(CancellationToken))
         {
             _client = new ClientWebSocket();
+
+            //System.Net.ServicePointManager.MaxServicePointIdleTime = int.MaxValue;
+            
+
             ConfigureOptionsBeforeConnect(_client.Options);
+            _client.Options.KeepAliveInterval = TimeSpan.Zero;
 
             await _client.ConnectAsync(new Uri(url), tok);
 

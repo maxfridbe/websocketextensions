@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,12 +8,12 @@ namespace WebSocketExtensions
 {
     public class ResourceLocker
     {
-        private Dictionary<object, SemaphoreSlim> _lockers = null;
+        private ConcurrentDictionary<object, SemaphoreSlim> _lockers = null;
         private object lockObj = new object();
 
         public ResourceLocker()
         {
-            _lockers = new Dictionary<object, SemaphoreSlim>();
+            _lockers = new ConcurrentDictionary<object, SemaphoreSlim>();
         }
 
         public void EnterLock(object resource)
@@ -20,10 +21,12 @@ namespace WebSocketExtensions
             SemaphoreSlim ss;
             lock (lockObj)
             {
+                
                 if (!_lockers.ContainsKey(resource))
                 {
                     ss = new SemaphoreSlim(1, 1);
-                    _lockers.Add(resource, ss);
+                    _lockers.TryAdd(resource, ss);
+                    //_lockers.Add(resource, ss);
                 }
                 else
                 {
@@ -48,7 +51,9 @@ namespace WebSocketExtensions
                 if (!_lockers.ContainsKey(resource))
                 {
                     ss = new SemaphoreSlim(1, 1);
-                    _lockers.Add(resource, ss);
+                    _lockers.TryAdd(resource, ss);
+
+//                    _lockers.Add(resource, ss);
                 }
                 else
                 {
@@ -67,7 +72,8 @@ namespace WebSocketExtensions
                 {
                     var ss = _lockers[resource];
                     ss.Dispose();
-                    _lockers.Remove(resource);
+                    _lockers.TryRemove(resource, out SemaphoreSlim val);
+                   // _lockers.Remove(resource);
                 }
             }
         }

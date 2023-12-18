@@ -24,17 +24,16 @@ namespace WebSocketExtensions
 
         private int _connectedClientCount = 0;
         private readonly long _queueThrottleLimit;
-        private readonly TimeSpan _keepAlivePingInterval;
+        //private readonly TimeSpan _keepAlivePingInterval;
         private bool _isDisposing = false;
 
         public WebListenerWebSocketServer(Action<string, bool> logger = null,
-            long queueThrottleLimitBytes = long.MaxValue,
-            int keepAlivePingIntervalS = 30) : base(logger)
+            long queueThrottleLimitBytes = long.MaxValue) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
-            _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
+            //_keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -119,6 +118,7 @@ namespace WebSocketExtensions
 
             _cancellationTokenSource = new CancellationTokenSource();
             _webListener = new WebListener();
+            //_webListener.Settings.Timeouts.IdleConnection = TimeSpan.FromHours(1);
             _webListener.Settings.UrlPrefixes.Add(listenerPrefix);
             _webListener.Start();
             _logInfo($"Listener started on {listenerPrefix}.");
@@ -243,11 +243,11 @@ namespace WebSocketExtensions
                     _logError($"Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
 
                     return;
-                }
+                } 
 
                 connectionId = Guid.NewGuid();
 
-                webSocket = await requestContext.AcceptWebSocketAsync(null, _keepAlivePingInterval);
+                webSocket = await requestContext.AcceptWebSocketAsync(null,TimeSpan.Zero);
 
                 bool clientAdded = _clients.TryAdd(connectionId, webSocket);
                 if (!clientAdded)
