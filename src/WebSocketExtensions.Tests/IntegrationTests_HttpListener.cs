@@ -703,7 +703,7 @@ namespace WebSocketExtensions.Tests
 
             //act
             var s = _getFile("tst", 20);
-            await client.SendStreamAsync(File.OpenRead(s));
+            await client.SendStreamAsync(File.OpenRead(s),new byte[1000*1000]);
             await Task.Delay(100);
 
             //assert
@@ -859,7 +859,7 @@ namespace WebSocketExtensions.Tests
             {
 
                 var s = _getFile("tst2", 10);
-                await client.SendStreamAsync(File.OpenRead(s));
+                await client.SendStreamAsync(File.OpenRead(s), new byte[1000*1000]);
                 await Task.Delay(1);
                 //Assert.Equal(new FileInfo(s).Length, recievedSize);
             }

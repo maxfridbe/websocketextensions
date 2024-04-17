@@ -21,8 +21,7 @@ namespace WebSocketExtensions
         {
             _locker.RemoveLock(ws);
         }
-
-        public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
+        public static async Task SendStreamAsync(this WebSocket ws, Stream stream, byte[] sendBuffer,bool dispose = false,  CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
                 throw new Exception("SendStreamAsync:Websocket is null");
@@ -38,21 +37,22 @@ namespace WebSocketExtensions
                 await _locker.EnterLockAsync(ws, tok);
                 try
                 {
-                    var buffSize = 1024 * 1024;
-                    var len = stream.Length;
-                    var chunksize = len > buffSize ? buffSize : len;
-                    var remaining = len;
-                    byte[] buffer = new byte[buffSize];
+                    var buffSize = sendBuffer.Length;
+                   // var buffSize = 1024 * 1024;
+                    //var len = stream.Length;
+                    //var chunksize = len > buffSize ? buffSize : len;
+                    var remaining = stream.Length;
+                    //byte[] buffer = new byte[buffSize];
                     while (remaining > 0)
                     {
-                        if (remaining < buffer.Length)
-                        {
-                            buffer = new byte[remaining];
-                        }
-                        var read = stream.Read(buffer, 0, buffer.Length);
-                        bool isLast = (remaining - buffer.Length) == 0;
-                        await _send(ws, new ArraySegment<byte>(buffer), WebSocketMessageType.Binary, isLast, tok);
-                        remaining -= buffer.Length;
+                        long readLen = Math.Min(remaining, buffSize); 
+                        
+                        var read = stream.Read(sendBuffer, 0, (int)readLen);
+                        remaining -= read;
+
+                        bool isLast = remaining == 0;
+                        var data = new ArraySegment<byte>(sendBuffer, 0, read);
+                        await _send(ws, data, WebSocketMessageType.Binary, isLast, tok);
                     }
                 }
                 catch (Exception e)

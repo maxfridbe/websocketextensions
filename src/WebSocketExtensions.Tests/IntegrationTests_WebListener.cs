@@ -57,7 +57,7 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-                [Obsolete]
+        [Obsolete]
 
         public void TestCreateServer()
         {
@@ -114,7 +114,7 @@ namespace WebSocketExtensions.Tests
         }
 
         [Fact]
-                [Obsolete]
+        [Obsolete]
 
         public async Task TestCreateServer_connect()
         {
@@ -924,7 +924,7 @@ namespace WebSocketExtensions.Tests
 
 
         [Fact]
-                [Obsolete]
+        [Obsolete]
 
         public async Task TestCreateServerClient_LoadThrottling()
         {
@@ -959,7 +959,9 @@ namespace WebSocketExtensions.Tests
                 try
                 {
                     await client.SendBytesAsync(b);
-                }catch(Exception e){
+                }
+                catch (Exception e)
+                {
                     throw;
                 }
                 await Task.Delay(1);
@@ -968,5 +970,63 @@ namespace WebSocketExtensions.Tests
             //assert
             await Task.Delay(100);
         }
+
+
+        [Fact]
+        public async Task TestCreateServerClient_LoadThrottling2()
+        {
+            //arrange
+            var s = _getFile("tst2", 10);
+            var bytes = File.ReadAllBytes(s);
+
+            long frank = 100 * 1000 * 1000;
+            var server = new WebListenerWebSocketServer(null, frank);// 
+            var port = _FreeTcpPort();
+            var comp = new TaskCompletionSource();
+
+            var beh = new testBeh()
+            {
+            };
+            int msgCount = 0;
+            beh.BinaryMessageHandler = (e) =>
+            { //handler introduces delay
+                Thread.Sleep(100);
+                msgCount++;
+                if (msgCount == 400)
+                    comp.TrySetResult();
+                Assert.True(e.Data.Length == bytes.Length);
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+
+            for (int i = 0; i < 400; i++)
+            {
+                client.SendBytesAsync(bytes);
+
+                client.SendBytesAsync(bytes);
+                await Task.Delay(1);
+            }
+            await comp.Task;
+
+            //assert
+        }
+
+
+
     }
+
+
+
+
 }

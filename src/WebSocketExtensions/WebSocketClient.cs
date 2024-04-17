@@ -15,6 +15,7 @@ namespace WebSocketExtensions
 
         private ClientWebSocket _client;
         private Guid _clientId;
+        private byte[] _sendBuffer;
         private Task _incomingMessagesTask;
         private PagingMessageQueue _messageQueue;
         private Action<WebSocketReceivedResultEventArgs> _closeBehavior;
@@ -22,9 +23,10 @@ namespace WebSocketExtensions
         private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
         private bool _disposing = false;
 
-        public WebSocketClient(Action<string, bool> logger = null, Guid? clientId = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
+        public WebSocketClient(Action<string, bool> logger = null,int defaultSendBufferLen=1024*1024,  Guid? clientId = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
         {
             _clientId = clientId ?? Guid.NewGuid();
+            _sendBuffer = new byte[defaultSendBufferLen];
             _recieveQueueLimitBytes = recieveQueueLimitBytes;
         }
 
@@ -74,9 +76,11 @@ namespace WebSocketExtensions
             return _client.SendBytesAsync(data, tok);
 
         }
-        public Task SendStreamAsync(Stream data, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Stream data, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
-            return _client.SendStreamAsync(data, dispose, tok);
+            if(sendBuffer == null)
+                sendBuffer = _sendBuffer;
+            return _client.SendStreamAsync(data, sendBuffer, dispose, tok);
         }
 
         public void Dispose()
