@@ -75,7 +75,7 @@ namespace WebSocketExtensions
             return ws.SendCloseAsync(status, description, CancellationToken.None);
         }
 
-        public Task SendStreamAsync(Guid connectionId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Guid connectionId, Stream stream, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = null;
             if (!_clients.TryGetValue(connectionId, out ws))
@@ -83,7 +83,7 @@ namespace WebSocketExtensions
                 throw new Exception($"connectionId {connectionId} is no longer a client");
             }
 
-            return ws.SendStreamAsync(stream, dispose, tok);
+            return ws.SendStreamAsync(stream, sendBuffer,dispose,  tok);
         }
 
         public Task SendBytesAsync(Guid connectionId, byte[] data, CancellationToken tok = default(CancellationToken))

@@ -82,7 +82,8 @@ namespace WebSocketExtensions
                     {
                         try
                         {
-                            await webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Thread requested disconnect", token);
+                            await webSocket.CloseOutputNormalAsync("Thread requested disconnect", token);
+                            //await webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Thread requested disconnect", token);
                         }
                         catch { }
                     }

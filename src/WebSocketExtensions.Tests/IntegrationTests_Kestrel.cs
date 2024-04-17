@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -169,7 +170,6 @@ namespace WebSocketExtensions.Tests
             var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
 
-
             //act
             await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
 
@@ -236,7 +236,7 @@ namespace WebSocketExtensions.Tests
             var res = await httpc.GetAsync("/ping_ms");
 
             //assert
-            Assert.Equal(HttpStatusCode.OK,res.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
 
         }
 
@@ -376,7 +376,7 @@ namespace WebSocketExtensions.Tests
             //act
             await connectedTCS.Task;
 
-           await server.AbortConnectionAsync(_cid,CancellationToken.None);//.DisconnectConnection(_cid,"justcause");
+            await server.AbortConnectionAsync(_cid, CancellationToken.None);//.DisconnectConnection(_cid,"justcause");
 
             //Assert;
             await Task.WhenAny(Task.Delay(800), serverDisconnectTCS.Task);
@@ -1136,6 +1136,58 @@ namespace WebSocketExtensions.Tests
                 await client.SendStreamAsync(File.OpenRead(s));
                 await Task.Delay(1);
             }
+
+            //assert
+        }
+
+
+        [Fact]
+        public async Task TestCreateServerClient_LoadThrottling2()
+        {
+            //arrange
+            var logger = _loggerFac();
+            var s = _getFile("tst2", 10);
+            var bytes = File.ReadAllBytes(s);
+
+            long frank = 100 * 1000 * 1000;
+            var server = new KestrelWebSocketServer(logger, frank);// 
+            var port = _FreeTcpPort();
+            var comp = new TaskCompletionSource();
+
+            var beh = new testBeh()
+            {
+            };
+            int msgCount = 0;
+            beh.BinaryMessageHandler = (e) =>
+            { //handler introduces delay
+                Thread.Sleep(100);
+                msgCount++;
+                if(msgCount == 400)
+                    comp.TrySetResult();
+                Assert.True(e.Data.Length == bytes.Length);
+            };
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => res = e.Data,
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+
+            for (int i = 0; i < 400; i++)
+            {
+                client.SendBytesAsync(bytes);
+
+                client.SendBytesAsync(bytes);
+                await Task.Delay(1);
+            }
+await comp.Task;
 
             //assert
         }
