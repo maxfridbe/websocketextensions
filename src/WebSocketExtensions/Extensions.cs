@@ -21,6 +21,7 @@ namespace WebSocketExtensions
                     while (webSocket.State == WebSocketState.Open)
                     {
                         var receivedResult = await webSocket.ReceiveAsync(buff, token).ConfigureAwait(false);
+                      
 
                         if (receivedResult.MessageType == WebSocketMessageType.Binary
                             || receivedResult.MessageType == WebSocketMessageType.Text)
@@ -44,8 +45,8 @@ namespace WebSocketExtensions
                         else if (receivedResult.MessageType == WebSocketMessageType.Close)
                         {
 
-                            if (webSocket.State != WebSocketState.Closed)
-                                await webSocket.SendCloseAsync(WebSocketCloseStatus.NormalClosure, "Honoring disconnect", token);
+                            if ( webSocket.State != WebSocketState.Open)
+                                await webSocket.CloseOutputNormalAsync("Honoring disconnect", token);
 
                             var closeStat = receivedResult.CloseStatus;
                             var closeStatDesc = receivedResult.CloseStatusDescription;

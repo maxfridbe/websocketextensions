@@ -7,15 +7,15 @@
     <Authors>Max Fridberg</Authors>
     <Company />
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <PackageTags>WebSocket System.Net</PackageTags>
+    <PackageTags>WebSocket System.Net WebSocketExtensions</PackageTags>
     <PackageProjectUrl>https://github.com/maxfridbe/websocketextensions</PackageProjectUrl>
     <PackageIconUrl>https://raw.githubusercontent.com/maxfridbe/websocketextensions/master/websocket.png</PackageIconUrl>
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>2.6.0.0</Version>
-    <AssemblyVersion>2.6.0.0</AssemblyVersion>
-    <FileVersion>2.6.0.0</FileVersion>
+    <Version>2.9.0.0</Version>
+    <AssemblyVersion>2.9.0.0</AssemblyVersion>
+    <FileVersion>2.9.0.0</FileVersion>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>

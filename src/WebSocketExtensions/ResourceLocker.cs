@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,87 +8,38 @@ namespace WebSocketExtensions
 {
     public class ResourceLocker
     {
-        private Dictionary<object, SemaphoreSlim> _lockers = null;
-        private object lockObj = new object();
+        private ConcurrentDictionary<object, SemaphoreSlim> _lockers = null;
 
         public ResourceLocker()
         {
-            _lockers = new Dictionary<object, SemaphoreSlim>();
-        }
-
-        public void EnterLock(object resource)
-        {
-            SemaphoreSlim ss;
-            lock (lockObj)
-            {
-                if (!_lockers.ContainsKey(resource))
-                {
-                    ss = new SemaphoreSlim(1, 1);
-                    _lockers.Add(resource, ss);
-                }
-                else
-                {
-                    ss = _lockers[resource];
-                }
-            }
-            try
-            {
-                ss.Wait();
-            }
-            catch (ArgumentNullException)
-            {
-                //disposed of while wait
-            }
+            _lockers = new ConcurrentDictionary<object, SemaphoreSlim>();
         }
 
         public Task EnterLockAsync(object resource, CancellationToken ct)
         {
-            SemaphoreSlim ss;
-            lock (lockObj)
-            {
-                if (!_lockers.ContainsKey(resource))
-                {
-                    ss = new SemaphoreSlim(1, 1);
-                    _lockers.Add(resource, ss);
-                }
-                else
-                {
-                    ss = _lockers[resource];
-                }
-            }
-
+            SemaphoreSlim ss= _lockers.GetOrAdd(resource, new SemaphoreSlim(1, 1));
             return ss.WaitAsync(ct);
         }
 
         internal void RemoveLock(object resource)
         {
-            lock (lockObj)
+            SemaphoreSlim ss;
+            if (_lockers.TryRemove(resource, out ss))
             {
-                if (_lockers.ContainsKey(resource))
-                {
-                    var ss = _lockers[resource];
-                    ss.Dispose();
-                    _lockers.Remove(resource);
-                }
+                ss.Dispose();
             }
         }
 
         public bool ExitLock(object resource)
         {
             SemaphoreSlim ss = null;
-            lock (lockObj)
+            if (_lockers.TryGetValue(resource, out ss))
             {
-                if (_lockers.ContainsKey(resource))
+                try
                 {
-                    ss = _lockers?[resource];
-                }
+                    ss.Release();
+                }catch (ObjectDisposedException ex) { }
             }
-
-            if (ss == null)
-                return false;
-
-            if (ss.CurrentCount != 1)
-                ss?.Release();
 
             return true;
         }

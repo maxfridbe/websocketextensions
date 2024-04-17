@@ -8,7 +8,7 @@ Defines WebSocket extensions to microsoft WebSocket implementation to bring it i
     - Uses Async Api + Tasks
     - Uses Microsoft's own implemenation of WebSocket and HttpServer for upgrade
 - It is available via nuget package websocketextensions
-- See IntegrationTests for usage examples: [https://github.com/maxfridbe/websocketextensions/blob/master/src/WebSocketExtensions.Tests/IntegrationTests_WebListener.cs]
+- See IntegrationTests for usage examples: [https://github.com/maxfridbe/websocketextensions/blob/master/src/WebSocketExtensions.Tests/IntegrationTests_Kestrel.cs]
 ---
 ## Why not use WebSocketSharp
 - They do not seem to have a dotnetcore version
@@ -20,8 +20,9 @@ Defines WebSocket extensions to microsoft WebSocket implementation to bring it i
     - Most not touched in forever
 ---
 ## This Nuget Package (websocketextensions) defines
-- HttpListenerWebSocketServer (for http.sys)
-- WebListenerWebSocketServer (for core)
+- KestrelWebSocketServer (for kestrel)
+- HttpListenerWebSocketServer [Obsolete] (for http.sys (linux + windows) for now)
+- WebListenerWebSocketServer [Obsolete] (for windows http.sys)
 - WebSocketClient
 - Extension Methods to WebSocket which allow for things like SendStream
 

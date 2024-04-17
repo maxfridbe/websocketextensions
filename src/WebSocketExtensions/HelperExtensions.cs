@@ -25,17 +25,17 @@ namespace WebSocketExtensions
         public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                throw new Exception("Websocket is null");
+                throw new Exception("SendStreamAsync:Websocket is null");
 
             if (ws.State != WebSocketState.Open)
             {
-                ws.CleanupSendMutex();
-                throw new Exception("Websocket not open.");
+                throw new Exception("SendStreamAsync: Websocket not open.");
             }
 
-            _locker.EnterLock(ws);
+          
             try
             {
+                await _locker.EnterLockAsync(ws, tok);
                 try
                 {
                     var buffSize = 1024 * 1024;
@@ -72,20 +72,21 @@ namespace WebSocketExtensions
             }
         }
 
-        public static Task SendCloseAsync(this WebSocket ws, WebSocketCloseStatus stat, string msg, CancellationToken tok = default(CancellationToken))
+        public static async Task SendCloseAsync(this WebSocket ws, WebSocketCloseStatus stat, string msg, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                return Task.FromException(new Exception("Websocket is null"));
+                throw new Exception("SendCloseAsync: Websocket is null");
 
-            _locker.EnterLock(ws);
+            if (ws.State != WebSocketState.Open)
+            {
+                throw new Exception("SendCloseAsync: Websocket not open.");
+            }
+
+            await _locker.EnterLockAsync(ws,tok);
 
             try
             {
-                return ws.CloseAsync(stat, msg, tok);
-            }
-            catch (Exception ex)
-            {
-                throw ex;
+                await ws.CloseAsync(stat, msg, tok);
             }
             finally
             {
@@ -93,45 +94,61 @@ namespace WebSocketExtensions
             }
         }
 
-        public static Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
+        public static async Task CloseOutputNormalAsync(this WebSocket ws,  string msg, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                return Task.FromException(new Exception("Websocket is null"));
+                throw new Exception("CloseOutputAsync: Websocket is null");
+            
 
-            if (ws.State != WebSocketState.Open)
-            {
-                ws.CleanupSendMutex();
-                return Task.FromException(new Exception("Websocket not open."));
-            }
-
-            _locker.EnterLock(ws);
+            await _locker.EnterLockAsync(ws, tok);
 
             try
             {
-                return _send(ws, new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, tok);
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, msg, tok);
             }
             finally
             {
                 _locker.ExitLock(ws);
             }
-
         }
 
-        public static Task SendStringAsync(this WebSocket ws, string data, CancellationToken tok = default(CancellationToken))
+        public static async Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
-                return Task.FromException(new Exception("Websocket is null"));
+                throw new Exception("SendBytesAsync: Websocket is null");
 
             if (ws.State != WebSocketState.Open)
             {
-                ws.CleanupSendMutex();
-                return Task.FromException(new Exception("Websocket not open."));
+                throw new Exception("SendBytesAsync: Websocket not open.");
             }
 
-            _locker.EnterLock(ws);
+            await _locker.EnterLockAsync(ws, tok);
+
             try
             {
-                return _send(ws, new ArraySegment<byte>(Encoding.UTF8.GetBytes(data)), WebSocketMessageType.Text, true, tok);
+                await _send(ws, new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, tok);
+            }
+            finally
+            {
+               _locker.ExitLock(ws);
+            }
+
+        }
+
+        public static async Task SendStringAsync(this WebSocket ws, string data, CancellationToken tok = default(CancellationToken))
+        {
+            if (ws == null)
+                throw new Exception("SendStringAsync: Websocket is null");
+
+            if (ws.State != WebSocketState.Open)
+            {
+                throw new Exception("SendStringAsync: Websocket not open.");
+            }
+
+            await _locker.EnterLockAsync(ws, tok);
+            try
+            {
+                await _send(ws, new ArraySegment<byte>(Encoding.UTF8.GetBytes(data)), WebSocketMessageType.Text, true, tok);
             }
             finally
             {

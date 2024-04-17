@@ -362,7 +362,7 @@ namespace WebSocketExtensions.Tests
         {
             //arrange
             var server = new HttpListenerWebSocketServer();
-            var port = 8883;//_FreeTcpPort();
+            var port = 5674;//_FreeTcpPort();
             Stopwatch sw = null;
 
             bool disconnected = false;
