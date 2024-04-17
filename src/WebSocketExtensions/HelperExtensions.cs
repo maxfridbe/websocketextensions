@@ -94,6 +94,24 @@ namespace WebSocketExtensions
             }
         }
 
+        public static async Task CloseOutputNormalAsync(this WebSocket ws,  string msg, CancellationToken tok = default(CancellationToken))
+        {
+            if (ws == null)
+                throw new Exception("CloseOutputAsync: Websocket is null");
+            
+
+            await _locker.EnterLockAsync(ws, tok);
+
+            try
+            {
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, msg, tok);
+            }
+            finally
+            {
+                _locker.ExitLock(ws);
+            }
+        }
+
         public static async Task SendBytesAsync(this WebSocket ws, byte[] data, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
