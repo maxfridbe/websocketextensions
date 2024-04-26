@@ -14,8 +14,11 @@ namespace WebSocketExtensions
         public Action<ClientWebSocketOptions> ConfigureOptionsBeforeConnect { get; set; } = (e) => { };
 
         private ClientWebSocket _client;
+        private readonly int _streamSendBufferLen;
+        private readonly int _incomingBufferSize;
         private Guid _clientId;
-        private byte[] _sendBuffer;
+        private readonly int? _keepAliveIntervalS;
+        private byte[] _streamSendBuffer;
         private Task _incomingMessagesTask;
         private PagingMessageQueue _messageQueue;
         private Action<WebSocketReceivedResultEventArgs> _closeBehavior;
@@ -23,10 +26,17 @@ namespace WebSocketExtensions
         private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
         private bool _disposing = false;
 
-        public WebSocketClient(Action<string, bool> logger = null,int defaultSendBufferLen=1024*1024,  Guid? clientId = null, long recieveQueueLimitBytes = long.MaxValue) : base(logger)
+        public WebSocketClient(Action<string, bool> logger = null,
+                                int streamSendBufferLen = 1024 * 1024,
+                                int incomingBufferSize = 1048576 * 4,//4mb
+                                Guid? clientId = null,
+                                int? keepAliveIntervalS = null,
+                                long recieveQueueLimitBytes = long.MaxValue) : base(logger)
         {
+            _streamSendBufferLen = streamSendBufferLen;
+            _incomingBufferSize = incomingBufferSize;
             _clientId = clientId ?? Guid.NewGuid();
-            _sendBuffer = new byte[defaultSendBufferLen];
+            _keepAliveIntervalS = keepAliveIntervalS;
             _recieveQueueLimitBytes = recieveQueueLimitBytes;
         }
 
@@ -35,10 +45,10 @@ namespace WebSocketExtensions
             _client = new ClientWebSocket();
 
             //System.Net.ServicePointManager.MaxServicePointIdleTime = int.MaxValue;
-            
+
 
             ConfigureOptionsBeforeConnect(_client.Options);
-            _client.Options.KeepAliveInterval = TimeSpan.Zero;
+            _client.Options.KeepAliveInterval = _keepAliveIntervalS.HasValue ? TimeSpan.FromSeconds(_keepAliveIntervalS.Value) : TimeSpan.Zero;
 
             await _client.ConnectAsync(new Uri(url), tok);
 
@@ -48,7 +58,11 @@ namespace WebSocketExtensions
 
             _messageQueue = new PagingMessageQueue("WebSocketClient", _logError, _recieveQueueLimitBytes);
 
-            _incomingMessagesTask = Task.Factory.StartNew(async () => await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _cancellationTokenSource.Token));
+            _incomingMessagesTask = Task.Factory.StartNew(async () =>
+            {
+                await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _incomingBufferSize, _cancellationTokenSource.Token);
+                _logError("WebSocketClient: Completed ProcessIncomingMessages");
+            });
         }
 
         public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
@@ -61,7 +75,7 @@ namespace WebSocketExtensions
                 }
                 catch (Exception e)
                 {
-                    _logError($"Error in handler '{handlerName}': {e}");
+                    _logError($"WebSocketClient: Error in handler '{handlerName}': {e}");
                 }
             });
         }
@@ -76,11 +90,16 @@ namespace WebSocketExtensions
             return _client.SendBytesAsync(data, tok);
 
         }
-        public Task SendStreamAsync(Stream data, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Stream data, byte[] streamSendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
-            if(sendBuffer == null)
-                sendBuffer = _sendBuffer;
-            return _client.SendStreamAsync(data, sendBuffer, dispose, tok);
+            if (streamSendBuffer == null)
+            {
+                if (_streamSendBuffer == null)
+                    _streamSendBuffer = new byte[_streamSendBufferLen];
+
+                streamSendBuffer = _streamSendBuffer;
+            }
+            return _client.SendStreamAsync(data, streamSendBuffer, dispose, tok);
         }
 
         public void Dispose()
@@ -99,7 +118,7 @@ namespace WebSocketExtensions
                 catch (Exception e)
                 {
                     if (_client.State != WebSocketState.Aborted)
-                        _logError($"Trying to close connection in dispose exception {e} {e.StackTrace}");
+                        _logError($"WebSocketClient: Trying to close connection in dispose exception {e} {e.StackTrace}");
                 }
 
                 _closeBehavior(new WebSocketReceivedResultEventArgs(WebSocketCloseStatus.NormalClosure, "Closed because disposing"));

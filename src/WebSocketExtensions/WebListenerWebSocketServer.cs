@@ -11,7 +11,10 @@ using System.Threading.Tasks;
 
 namespace WebSocketExtensions
 {
-    //## The Server class    
+    /// <summary>
+    /// Web Listener listens on WINDOWS Dotnet48
+    /// Use Kestrel for dotnet6 etc
+    /// </summary>
     [Obsolete("Use KestrelWebSocketServer from WebSocketExtensions.Kestrel")]
     public class WebListenerWebSocketServer : WebSocketReciever, IDisposable
     {
@@ -21,19 +24,22 @@ namespace WebSocketExtensions
         private Task _listenTask;
         private PagingMessageQueue _messageQueue;
         private CancellationTokenSource _cancellationTokenSource;
-
         private int _connectedClientCount = 0;
         private readonly long _queueThrottleLimit;
-        //private readonly TimeSpan _keepAlivePingInterval;
+        private readonly int _incomingBufferSize;
+        private readonly TimeSpan _keepAlivePingInterval;
         private bool _isDisposing = false;
 
         public WebListenerWebSocketServer(Action<string, bool> logger = null,
-            long queueThrottleLimitBytes = long.MaxValue) : base(logger)
+            long queueThrottleLimitBytes = long.MaxValue,
+            int incomingBufferSize = 1048576 * 5,//5mb
+            int? keepAlivePingIntervalS = null) : base(logger)
         {
             _behaviors = new ConcurrentDictionary<string, Func<WebListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
-            //_keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
+            _incomingBufferSize = incomingBufferSize;
+            _keepAlivePingInterval = keepAlivePingIntervalS.HasValue ? TimeSpan.FromSeconds(keepAlivePingIntervalS.Value) : TimeSpan.Zero;
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -56,7 +62,7 @@ namespace WebSocketExtensions
             {
                 return Task.CompletedTask;
             }
-            return ws.CloseAsync(WebSocketCloseStatus.NormalClosure,"Abort Connection", CancellationToken.None);
+            return ws.CloseOutputNormalAsync($"Aborting Connection {connectionid}", CancellationToken.None);
 
             //ws.Abort();
         }
@@ -72,35 +78,31 @@ namespace WebSocketExtensions
             return ws.SendCloseAsync(status, description, CancellationToken.None);
         }
 
-        public Task SendStreamAsync(Guid connectionid, Stream stream,byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        private WebSocket _getWsFromConnectionId(Guid connectionid)
         {
-            WebSocket ws = null;
-            if (!_clients.TryGetValue(connectionid, out ws))
-            {
-                throw new Exception($"connectionId {connectionid} is no longer a client");
-            }
+            if (_clients.TryGetValue(connectionid, out WebSocket ws))
+                return ws;
 
-            return ws.SendStreamAsync(stream, sendBuffer,dispose,  tok);
+            throw new Exception($"WebListenerWebSocketServer: connectionId {connectionid} is no longer a client");
+        }
+        public Task SendStreamAsync(Guid connectionid, Stream stream, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        {
+            WebSocket ws = _getWsFromConnectionId(connectionid);
+
+            return ws.SendStreamAsync(stream, sendBuffer, dispose, tok);
         }
 
         public Task SendBytesAsync(Guid connectionid, byte[] data, CancellationToken tok = default(CancellationToken))
         {
-            WebSocket ws = null;
-            if (!_clients.TryGetValue(connectionid, out ws))
-            {
-                throw new Exception($"connectionId {connectionid} is no longer a client");
-            }
+            WebSocket ws = _getWsFromConnectionId(connectionid);
 
             return ws.SendBytesAsync(data, tok);
         }
 
         public Task SendStringAsync(Guid connectionid, string data, CancellationToken tok = default(CancellationToken))
         {
-            WebSocket ws = null;
-            if (!_clients.TryGetValue(connectionid, out ws))
-            {
-                throw new Exception($"connectionId {connectionid} is no longer a client");
-            }
+            WebSocket ws = _getWsFromConnectionId(connectionid);
+
 
             return ws.SendStringAsync(data, tok);
         }
@@ -118,10 +120,10 @@ namespace WebSocketExtensions
 
             _cancellationTokenSource = new CancellationTokenSource();
             _webListener = new WebListener();
-           // _webListener.Settings.Timeouts.IdleConnection = TimeSpan.FromHours(1);
+            // _webListener.Settings.Timeouts.IdleConnection = TimeSpan.FromHours(1);
             _webListener.Settings.UrlPrefixes.Add(listenerPrefix);
             _webListener.Start();
-            _logInfo($"Listener started on {listenerPrefix}.");
+            _logInfo($"WebListenerWebSocketServer: Listener started on {listenerPrefix}.");
             _messageQueue = new PagingMessageQueue("WebSocketServer", _logError, _queueThrottleLimit);
 
             _listenTask = Task.Run(async () =>
@@ -174,14 +176,14 @@ namespace WebSocketExtensions
                 }
                 catch (Exception e)
                 {
-                    _logError($"Error in handler '{handlerName}': {e}");
+                    _logError($"WebListenerWebSocketServer: Error in handler '{handlerName}': {e}");
                 }
             });
         }
 
         private async Task listenLoop(WebListener listener, CancellationToken tok)
         {
-            _logInfo($"Listening loop started.");
+            _logInfo($"WebListenerWebSocketServer: Listening loop started.");
 
             while (true)
             {
@@ -195,7 +197,7 @@ namespace WebSocketExtensions
                     Func<WebListenerWebSocketServerBehavior> builder = null;
                     if (!_behaviors.TryGetValue(requestContext.Request.RawUrl, out builder))
                     {
-                        _logError($"There is no behavior defined for {requestContext.Request.RawUrl}");
+                        _logError($"WebListenerWebSocketServer: There is no behavior defined for {requestContext.Request.RawUrl}");
                         requestContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
                         requestContext.Abort();
                     }
@@ -206,19 +208,19 @@ namespace WebSocketExtensions
                 }
                 catch (HttpListenerException listenerex)
                 {
-                    _logInfo($"HttpListenerException {listenerex}");
+                    _logInfo($"WebListenerWebSocketServer: HttpListenerException {listenerex}");
                 }
                 catch (OperationCanceledException canceledex)
                 {
-                    _logInfo($"OperationCanceledException {canceledex}");
+                    _logInfo($"WebListenerWebSocketServer: OperationCanceledException {canceledex}");
                 }
                 catch (Exception e)
                 {
-                    _logError(e.ToString());
+                    _logError($"WebListenerWebSocketServer: Exception {e.ToString()}");
                 }
             }
 
-            _logInfo($"Listening loop stopped.");
+            _logInfo($"WebListenerWebSocketServer: Listening loop stopped.");
         }
 
         private async Task handleClient<TWebSocketBehavior>(RequestContext requestContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
@@ -240,30 +242,30 @@ namespace WebSocketExtensions
                     requestContext.Response.StatusCode = statusCode;
                     requestContext.Abort();
 
-                    _logError($"Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
+                    _logError($"WebListenerWebSocketServer: Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
 
                     return;
-                } 
+                }
 
                 connectionId = Guid.NewGuid();
 
-                webSocket = await requestContext.AcceptWebSocketAsync(null,TimeSpan.Zero);
+                webSocket = await requestContext.AcceptWebSocketAsync(null, _keepAlivePingInterval);
 
                 bool clientAdded = _clients.TryAdd(connectionId, webSocket);
                 if (!clientAdded)
                 {
-                    throw new ArgumentException($"Attempted to add a new web socket connection to server for connection id '{connectionId}' that already exists.");
+                    throw new ArgumentException($"WebListenerWebSocketServer: Attempted to add a new web socket connection to server for connection id '{connectionId}' that already exists.");
                 }
 
                 Interlocked.Increment(ref _connectedClientCount);
-                _logInfo($"Connection id '{connectionId}' accepted; there are now {_connectedClientCount} total clients.");
+                _logInfo($"WebListenerWebSocketServer: Connection id '{connectionId}' accepted; there are now {_connectedClientCount} total clients.");
 
                 var safeconnected = MakeSafe<Guid, RequestContext>(behavior.OnConnectionEstablished, "behavior.OnClientConnected");
                 safeconnected(connectionId, requestContext);
             }
             catch (Exception e)
             {
-                _logError($"Client handler exception: {e}");
+                _logError($"WebListenerWebSocketServer: Client handler exception: {e}");
 
                 requestContext.Response.StatusCode = 500;
                 requestContext.Abort();
@@ -286,13 +288,13 @@ namespace WebSocketExtensions
             {
                 using (webSocket)
                 {
-                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, token);
+                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, _incomingBufferSize, token);
                 }
             }
             finally
             {
                 Interlocked.Decrement(ref _connectedClientCount);
-                _logInfo($"Connection id '{connectionId}' disconnected; there are now {_connectedClientCount} total clients.");
+                _logInfo($"WebListenerWebSocketServer: Connection id '{connectionId}' disconnected; there are now {_connectedClientCount} total clients.");
 
                 webSocket?.CleanupSendMutex();
                 requestContext.Dispose();
@@ -304,10 +306,10 @@ namespace WebSocketExtensions
                 }
                 else
                 {
-                    _logError($"Attempted to remove an existing web socket connection to server for connection id '{connectionId}' that no longer exists.");
+                    _logError($"WebListenerWebSocketServer: Attempted to remove an existing web socket connection to server for connection id '{connectionId}' that no longer exists.");
                 }
 
-                _logInfo($"Completed HandleClient task for connection id '{connectionId}'.");
+                _logInfo($"WebListenerWebSocketServer: Completed HandleClient task for connection id '{connectionId}'.");
             }
         }
 

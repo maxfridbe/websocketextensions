@@ -14,6 +14,7 @@ namespace WebSocketExtensions
     [Obsolete("Use KestrelWebSocketServer from WebSocketExtensions.Kestrel")]
     public class HttpListenerWebSocketServer : WebSocketReciever, IDisposable
     {
+        private int _incomingBufferSize;
         private ConcurrentDictionary<Guid, WebSocket> _clients;
         private ConcurrentDictionary<string, Func<HttpListenerWebSocketServerBehavior>> _behaviors;
         private HttpListener _httpListener;
@@ -30,8 +31,10 @@ namespace WebSocketExtensions
         public HttpListenerWebSocketServer(Action<string, bool> logger = null,
             long queueThrottleLimitBytes = long.MaxValue,
             int keepAlivePingIntervalS = 30,
+            int incomingBufferSize = 1024 * 1024 * 5,
             bool enablePingResponse = false) : base(logger)
         {
+            _incomingBufferSize=incomingBufferSize;
             _behaviors = new ConcurrentDictionary<string, Func<HttpListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
@@ -296,7 +299,7 @@ namespace WebSocketExtensions
             {
                 using (webSocket)
                 {
-                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, token);
+                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, _incomingBufferSize, token);
                 }
             }
             finally

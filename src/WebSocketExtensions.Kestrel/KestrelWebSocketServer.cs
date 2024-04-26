@@ -25,6 +25,7 @@ public class KestrelWebSocketServer : IDisposable
     private int _connectedClientCount = 0;
     private readonly ILogger _logger = null;
     private readonly long _queueThrottleLimit;
+    private readonly int _incomingBufferSize;
     private readonly string _pingResponseRoute;
     private readonly TimeSpan _keepAlivePingInterval;
     private bool _isDisposing = false;
@@ -33,12 +34,14 @@ public class KestrelWebSocketServer : IDisposable
     public KestrelWebSocketServer(ILogger logger,
             long queueThrottleLimitBytes = long.MaxValue,
             int keepAlivePingIntervalS = 30,
+            int incomingBufferSize = 1048576 * 5,//5mb
             string httpPingResponseRoute = null)
     {
         _behaviors = new ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>>();
         _clients = new ConcurrentDictionary<Guid, WebSocket>();
         _logger = logger;
         _queueThrottleLimit = queueThrottleLimitBytes;
+        _incomingBufferSize = incomingBufferSize;
         _pingResponseRoute = httpPingResponseRoute;
         _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
     }
@@ -60,9 +63,9 @@ public class KestrelWebSocketServer : IDisposable
         {
             return Task.CompletedTask;
         }
-//ws.Dispose();
+        //ws.Dispose();
         //ws.Abort();
-       return ws.CloseAsync(WebSocketCloseStatus.NormalClosure,"Abort Connection", tok);
+        return ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Abort Connection", tok);
     }
 
     public Task DisconnectConnection(Guid connectionId, string description, WebSocketCloseStatus status = WebSocketCloseStatus.EndpointUnavailable)
@@ -76,35 +79,33 @@ public class KestrelWebSocketServer : IDisposable
         return ws.SendCloseAsync(status, description, CancellationToken.None);
     }
 
+    private WebSocket _getWebSocketFromConnectionId(Guid connectionId)
+    {
+        if (_clients.TryGetValue(connectionId, out WebSocket ws))
+            return ws;
+
+        throw new Exception($"KestrelWebSocketServer: connectionId {connectionId} is no longer a client");
+
+    }
     public Task SendStreamAsync(Guid connectionId, Stream stream, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
     {
-        WebSocket ws = null;
-        if (!_clients.TryGetValue(connectionId, out ws))
-        {
-            throw new Exception($"connectionId {connectionId} is no longer a client");
-        }
+        WebSocket ws = _getWebSocketFromConnectionId(connectionId);
 
-        return ws.SendStreamAsync(stream, sendBuffer,dispose,  tok);
+        return ws.SendStreamAsync(stream, sendBuffer, dispose, tok);
     }
 
     public Task SendBytesAsync(Guid connectionId, byte[] data, CancellationToken tok = default(CancellationToken))
     {
-        WebSocket ws = null;
-        if (!_clients.TryGetValue(connectionId, out ws))
-        {
-            throw new Exception($"connectionId {connectionId} is no longer a client");
-        }
+        WebSocket ws = _getWebSocketFromConnectionId(connectionId);
+
 
         return ws.SendBytesAsync(data, tok);
     }
 
     public Task SendStringAsync(Guid connectionId, string data, CancellationToken tok = default(CancellationToken))
     {
-        WebSocket ws = null;
-        if (!_clients.TryGetValue(connectionId, out ws))
-        {
-            throw new Exception($"connectionId {connectionId} is no longer a client");
-        }
+        WebSocket ws = _getWebSocketFromConnectionId(connectionId);
+
 
         return ws.SendStringAsync(data, tok);
     }
@@ -127,9 +128,10 @@ public class KestrelWebSocketServer : IDisposable
             .UseUrls(listenerPrefix);
         hostBuilder.Configure(app =>
         {
-            
-            app.UseWebSockets(new WebSocketOptions{
-                KeepAliveInterval=TimeSpan.FromSeconds(10)
+
+            app.UseWebSockets(new WebSocketOptions
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(10)
 
             });
             app.Run(async context =>
@@ -144,7 +146,7 @@ public class KestrelWebSocketServer : IDisposable
         _host = hostBuilder.Build();
         var startedHostTask = _host.StartAsync();
 
-        _logger.LogInformation($"Listener Started on {listenerPrefix}.");
+        _logger.LogInformation($"KestrelWebSocketServer: Listener Started on {listenerPrefix}.");
         _messageQueue = new PagingMessageQueue("WebSocketServer", (e) => _logger.LogError(e), _queueThrottleLimit);
 
         return startedHostTask;
@@ -175,7 +177,7 @@ public class KestrelWebSocketServer : IDisposable
              }
              catch (Exception e)
              {
-                 _logger.LogError($"Error in handler {handlerName} {e}");
+                 _logger.LogError($"KestrelWebSocketServer: Error in handler {handlerName} {e}");
              }
          });
     }
@@ -191,7 +193,7 @@ public class KestrelWebSocketServer : IDisposable
         try
         {
             if (listenerContext.Request.Path.HasValue
-                && !string.IsNullOrEmpty(_pingResponseRoute )
+                && !string.IsNullOrEmpty(_pingResponseRoute)
                 && listenerContext.Request.Path.Value.Contains(_pingResponseRoute)
                 && !listenerContext.WebSockets.IsWebSocketRequest)
             {
@@ -215,7 +217,7 @@ public class KestrelWebSocketServer : IDisposable
 
                 // await listenerContext.Response.CompleteAsync();
 
-                _logger.LogError($"Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
+                _logger.LogError($"KestrelWebSocketServer: Failed to validate client context. Closing connection. Status: {statusCode}. Description: {statusDescription}.");
 
                 return;
             }
@@ -226,7 +228,7 @@ public class KestrelWebSocketServer : IDisposable
             bool clientAdded = _clients.TryAdd(connectionId, webSocket);
             if (!clientAdded)
             {
-                throw new ArgumentException($"Attempted to add a new web socket connection to server for connection id '{connectionId}' that already exists.");
+                throw new ArgumentException($"KestrelWebSocketServer: Attempted to add a new web socket connection to server for connection id '{connectionId}' that already exists.");
             }
 
             Interlocked.Increment(ref _connectedClientCount);
@@ -259,14 +261,14 @@ public class KestrelWebSocketServer : IDisposable
         {
             using (webSocket)
             {
-                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior,
-                (i) => _logger.LogInformation(i), token);
+                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, (i) => _logger.LogInformation(i), _incomingBufferSize, token);
+                _logger.LogInformation($"KestrelWebSocketServer: ProcessIncomingMessages completed for {connectionId}");
             }
         }
         finally
         {
             Interlocked.Decrement(ref _connectedClientCount);
-            _logger.LogInformation($"Connection id '{connectionId}' disconnected; there are now {_connectedClientCount} total clients.");
+            _logger.LogInformation($"KestrelWebSocketServer: Connection id '{connectionId}' disconnected; there are now {_connectedClientCount} total clients.");
 
             webSocket?.CleanupSendMutex();
             listenerContext.Abort();
@@ -278,10 +280,10 @@ public class KestrelWebSocketServer : IDisposable
             }
             else
             {
-                _logger.LogError($"Attempted to remove an existing web socket connection to server for connection id '{connectionId}' that no longer exists.");
+                _logger.LogError($"KestrelWebSocketServer: Attempted to remove an existing web socket connection to server for connection id '{connectionId}' that no longer exists.");
             }
 
-            _logger.LogInformation($"Completed HandleClient task for connection id '{connectionId}'.");
+            _logger.LogInformation($"KestrelWebSocketServer: Completed HandleClient task for connection id '{connectionId}'.");
         }
     }
 

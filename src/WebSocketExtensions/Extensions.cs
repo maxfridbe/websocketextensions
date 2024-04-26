@@ -102,10 +102,10 @@ namespace WebSocketExtensions
             Action<BinaryMessageReceivedEventArgs> binaryBehavior,
             Action<WebSocketReceivedResultEventArgs> closeBehavior,
             Action<string> logInfo,
+            int incomingBufferSize = 1048576 * 4,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            //  await Task.Factory.StartNew(async () => {
-            byte[] messageBufferBytes = new byte[1048576];
+            byte[] messageBufferBytes = new byte[incomingBufferSize];//1mb *4
             ArraySegment<byte> messageBuffer = new ArraySegment<byte>(messageBufferBytes);
 
             while (!cancellationToken.IsCancellationRequested)
@@ -123,7 +123,6 @@ namespace WebSocketExtensions
 
                 messageQueue.Push(msg);
             }
-            //  });
         }
     }
 }

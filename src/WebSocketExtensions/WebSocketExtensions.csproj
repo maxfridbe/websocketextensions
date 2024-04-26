@@ -13,9 +13,9 @@
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>2.9.0.0</Version>
-    <AssemblyVersion>2.9.0.0</AssemblyVersion>
-    <FileVersion>2.9.0.0</FileVersion>
+    <Version>2.10.0.0</Version>
+    <AssemblyVersion>2.10.0.0</AssemblyVersion>
+    <FileVersion>2.10.0.0</FileVersion>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
