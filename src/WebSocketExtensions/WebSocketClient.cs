@@ -60,7 +60,7 @@ namespace WebSocketExtensions
 
             _incomingMessagesTask = Task.Factory.StartNew(async () =>
             {
-                await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, _incomingBufferSize, _cancellationTokenSource.Token);
+                await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo,false, _incomingBufferSize, _cancellationTokenSource.Token);
                 _logError("WebSocketClient: Completed ProcessIncomingMessages");
             });
         }

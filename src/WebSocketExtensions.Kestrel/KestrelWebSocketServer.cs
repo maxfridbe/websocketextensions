@@ -25,6 +25,7 @@ public class KestrelWebSocketServer : IDisposable
     private int _connectedClientCount = 0;
     private readonly ILogger _logger = null;
     private readonly long _queueThrottleLimit;
+    private bool _queueStringMessages;
     private readonly int _incomingBufferSize;
     private readonly string _pingResponseRoute;
     private readonly TimeSpan _keepAlivePingInterval;
@@ -35,12 +36,14 @@ public class KestrelWebSocketServer : IDisposable
             long queueThrottleLimitBytes = long.MaxValue,
             int keepAlivePingIntervalS = 30,
             int incomingBufferSize = 1048576 * 5,//5mb
+            bool queueStringMessages = false,
             string httpPingResponseRoute = null)
     {
         _behaviors = new ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>>();
         _clients = new ConcurrentDictionary<Guid, WebSocket>();
         _logger = logger;
         _queueThrottleLimit = queueThrottleLimitBytes;
+        _queueStringMessages = queueStringMessages;
         _incomingBufferSize = incomingBufferSize;
         _pingResponseRoute = httpPingResponseRoute;
         _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
@@ -261,7 +264,7 @@ public class KestrelWebSocketServer : IDisposable
         {
             using (webSocket)
             {
-                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, (i) => _logger.LogInformation(i), _incomingBufferSize, token);
+                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, (i) => _logger.LogInformation(i), _queueStringMessages, _incomingBufferSize, token);
                 _logger.LogInformation($"KestrelWebSocketServer: ProcessIncomingMessages completed for {connectionId}");
             }
         }

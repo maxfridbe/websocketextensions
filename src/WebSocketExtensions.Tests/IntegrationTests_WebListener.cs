@@ -185,9 +185,10 @@ namespace WebSocketExtensions.Tests
             await client.ConnectAsync(new Uri($"ws://localhost:{port}/aaa"), CancellationToken.None);
 
             //act
-            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hi")), WebSocketMessageType.Text, true, CancellationToken.None);
+            await client.SendStringAsync("hi", CancellationToken.None);
             var byt = new byte[1024];
             await Task.Delay(100);
+
             var read = await client.ReceiveAsync(new ArraySegment<byte>(byt), CancellationToken.None);
 
 
@@ -920,6 +921,114 @@ namespace WebSocketExtensions.Tests
             Assert.Equal("hihi", Encoding.UTF8.GetString(new ArraySegment<byte>(byt, 0, read.Count)));
 
         }
+
+
+
+
+        private byte[] GetByteArray(int sizeInBytes)
+        {
+            Random rnd = new Random();
+            byte[] b = new byte[sizeInBytes];
+            rnd.NextBytes(b);
+            return b;
+        }
+
+        [Fact]
+        [Obsolete]
+
+        public async Task Test_SendBinary_Then_PINGS()
+        {
+            //arrange
+            using var server = new WebListenerWebSocketServer(queueThrottleLimitBytes: 200L * 1024 * 1024);// 
+            var port = _FreeTcpPort();
+
+            var tcs = new TaskCompletionSource();
+            Task.Delay(TimeSpan.FromMinutes(5)).ContinueWith((e) => tcs.TrySetCanceled());
+            var beh = new testBeh()
+            {
+                BinaryMessageHandler = (e) =>
+                {
+                },
+                StringMessageHandler=(e) =>
+                {
+                    tcs.SetResult();
+                }
+            };
+
+            var sem = new SemaphoreSlim(4);
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            using var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => { 
+                    _output.WriteLine($"REC:{e.Data}");
+                    e.WebSocket.SendStringAsync("ACK").GetAwaiter().GetResult();
+                },
+                BinaryHandler = async (e) => {
+                    _output.WriteLine("REC Inf");
+
+                    await sem.WaitAsync();//without limiting number of processing threads bad things
+                    //sim a delay
+                    Task.Run(() =>
+                    {
+                        Thread.Sleep(TimeSpan.FromDays(1));
+                        sem.Release();
+                    });
+               
+                }
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+
+            var b = GetByteArray(86);
+            var cid = server.GetActiveConnectionIds().First();
+            for (int i = 0; i < 400; i++)
+            {
+                await server.SendBytesAsync(cid, b);
+            }
+
+           await Task.Run(async () =>
+            {
+                while (!tcs.Task.IsCompleted)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10));
+                    server.SendStringAsync(cid, "PING");
+
+                }
+            });
+
+            Assert.True(tcs.Task.IsCompletedSuccessfully);
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

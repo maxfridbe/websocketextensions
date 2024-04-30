@@ -299,7 +299,7 @@ namespace WebSocketExtensions
             {
                 using (webSocket)
                 {
-                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, _incomingBufferSize, token);
+                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, false, _incomingBufferSize, token);
                 }
             }
             finally

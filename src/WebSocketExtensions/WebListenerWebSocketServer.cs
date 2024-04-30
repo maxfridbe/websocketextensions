@@ -28,10 +28,12 @@ namespace WebSocketExtensions
         private readonly long _queueThrottleLimit;
         private readonly int _incomingBufferSize;
         private readonly TimeSpan _keepAlivePingInterval;
+        private bool _queueStringMessages;
         private bool _isDisposing = false;
 
         public WebListenerWebSocketServer(Action<string, bool> logger = null,
             long queueThrottleLimitBytes = long.MaxValue,
+            bool queueStringMessages = false,
             int incomingBufferSize = 1048576 * 5,//5mb
             int? keepAlivePingIntervalS = null) : base(logger)
         {
@@ -40,6 +42,7 @@ namespace WebSocketExtensions
             _queueThrottleLimit = queueThrottleLimitBytes;
             _incomingBufferSize = incomingBufferSize;
             _keepAlivePingInterval = keepAlivePingIntervalS.HasValue ? TimeSpan.FromSeconds(keepAlivePingIntervalS.Value) : TimeSpan.Zero;
+            _queueStringMessages = queueStringMessages;
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -288,7 +291,7 @@ namespace WebSocketExtensions
             {
                 using (webSocket)
                 {
-                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, _incomingBufferSize, token);
+                    await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, _logInfo, _queueStringMessages, _incomingBufferSize, token);
                 }
             }
             finally

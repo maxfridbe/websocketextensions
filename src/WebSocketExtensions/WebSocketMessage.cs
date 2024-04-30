@@ -19,6 +19,7 @@ namespace WebSocketExtensions
         public string ExceptionMessage { get; private set; }
         public long BinDataLen { get; private set; } = 0;
         public bool IsBinary { get; }
+        public bool IsString { get;}
 
         private WebSocket _webSocket;
         private byte[] _bindata = null;
@@ -36,6 +37,7 @@ namespace WebSocketExtensions
         {
             StringData = data;
             ConnectionId = connectionId;
+            IsString = true;
         }
 
         public WebSocketMessage(string exceptionMessage, Exception e, Guid connectionId, bool isdisconnect)

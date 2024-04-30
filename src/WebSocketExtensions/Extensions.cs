@@ -102,6 +102,7 @@ namespace WebSocketExtensions
             Action<BinaryMessageReceivedEventArgs> binaryBehavior,
             Action<WebSocketReceivedResultEventArgs> closeBehavior,
             Action<string> logInfo,
+            bool queueStringMessages = false,
             int incomingBufferSize = 1048576 * 4,
             CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -118,8 +119,13 @@ namespace WebSocketExtensions
                     closeBehavior(new WebSocketClosedEventArgs(connectionId, msg.WebSocketCloseStatus, msg.CloseStatDesc));
                     break;
                 }
-
                 msg.SetMessageHandlers(messageBehavior, binaryBehavior, webSocket);
+
+                if (msg.IsString && !queueStringMessages)
+                {
+                    msg.HandleMessage(logInfo);
+                    continue;
+                }
 
                 messageQueue.Push(msg);
             }

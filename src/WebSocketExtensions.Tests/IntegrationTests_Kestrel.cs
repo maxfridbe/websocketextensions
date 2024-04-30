@@ -336,6 +336,90 @@ namespace WebSocketExtensions.Tests
 
         }
 
+
+        private byte[] GetByteArray(int sizeInBytes)
+        {
+            Random rnd = new Random();
+            byte[] b = new byte[sizeInBytes];
+            rnd.NextBytes(b);
+            return b;
+        }
+
+        [Fact]
+        public async Task Test_SendBinary_Then_PINGS()
+        {
+            //arrange
+            var logger = _loggerFac();
+            using var server = new  KestrelWebSocketServer(logger);  
+            var port = _FreeTcpPort();
+
+            var tcs = new TaskCompletionSource();
+            Task.Delay(TimeSpan.FromMinutes(5)).ContinueWith((e) => tcs.TrySetCanceled());
+            var beh = new testBeh()
+            {
+                BinaryMessageHandler = (e) =>
+                {
+                },
+                StringMessageHandler = (e) =>
+                {
+                    tcs.SetResult();
+                }
+            };
+
+            var sem = new SemaphoreSlim(4);
+
+            server.AddRouteBehavior("/aaa", () => beh);
+            await server.StartAsync($"http://localhost:{port}/");
+
+            string res = null;
+            using var client = new WebSocketClient()
+            {
+                MessageHandler = (e) => {
+                    _output.WriteLine($"REC:{e.Data}");
+                    e.WebSocket.SendStringAsync("ACK").GetAwaiter().GetResult();
+                },
+                BinaryHandler = async (e) => {
+                    _output.WriteLine("REC Inf");
+
+                    await sem.WaitAsync();//without limiting number of processing threads bad things
+                    //sim a delay
+                    Task.Run(() =>
+                    {
+                        Thread.Sleep(TimeSpan.FromDays(1));
+                       sem.Release();
+                    });
+
+                }
+            };
+
+            await client.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            //act
+
+            var b = GetByteArray(86);
+            var cid = server.GetActiveConnectionIds().First();
+            for (int i = 0; i < 400; i++)
+            {
+                await server.SendBytesAsync(cid, b);
+            }
+
+            await Task.Run(async () =>
+            {
+                while (!tcs.Task.IsCompleted)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10));
+                    server.SendStringAsync(cid, "PING");
+
+                }
+            });
+
+            Assert.True(tcs.Task.IsCompletedSuccessfully);
+        }
+
+
+
+
+
         [Fact]
         public async Task TestServerAbort()
         {
