@@ -44,10 +44,10 @@ namespace WebSocketExtensions
                         }
                         else if (receivedResult.MessageType == WebSocketMessageType.Close)
                         {
-
-                            if ( webSocket.State != WebSocketState.Open)
-                                await webSocket.CloseOutputNormalAsync("Honoring disconnect", token);
-
+                            if ( webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
+                                    await webSocket.CloseOutputNormalAsync( $"Honoring disconnect in {webSocket.State} status", token);
+    
+                           
                             var closeStat = receivedResult.CloseStatus;
                             var closeStatDesc = receivedResult.CloseStatusDescription;
 

@@ -1119,9 +1119,12 @@ namespace WebSocketExtensions.Tests
                 //Verify that new client still works again
                 await newClient.SendStringAsync("hi", CancellationToken.None);
 
+var count = 0;
                 while (kickoffRes == null)
                 {
+                    if(count>400)
                     await Task.Delay(100);
+                    count ++;
                 }
                 Assert.Equal("dontlikeu", kickoffRes);
                 Assert.Equal("hihi", res);
