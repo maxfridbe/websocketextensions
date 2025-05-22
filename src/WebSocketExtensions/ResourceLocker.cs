@@ -38,7 +38,7 @@ namespace WebSocketExtensions
                 try
                 {
                     ss.Release();
-                }catch (ObjectDisposedException ex) { }
+                }catch (ObjectDisposedException) { }
             }
 
             return true;

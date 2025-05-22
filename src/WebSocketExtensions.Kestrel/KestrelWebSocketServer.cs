@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -14,10 +15,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
+public record class KestrelWebSocketServerStats(PagingMessageQueueStats? QueueStats, int ClientCount);
+
 public class KestrelWebSocketServer : IDisposable
 {
-
-
     private ConcurrentDictionary<Guid, WebSocket> _clients;
     private ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>> _behaviors;
     private PagingMessageQueue _messageQueue = null;
@@ -26,27 +27,39 @@ public class KestrelWebSocketServer : IDisposable
     private readonly ILogger _logger = null;
     private readonly long _queueThrottleLimit;
     private bool _queueStringMessages;
-    private readonly int _incomingBufferSize;
+    private readonly int _incomingBufferSizeBytes;
     private readonly string _pingResponseRoute;
-    private readonly TimeSpan _keepAlivePingInterval;
+    // private readonly TimeSpan _keepAlivePingInterval;
     private bool _isDisposing = false;
     private IWebHost _host = null;
+    private Func<HttpContext, KestrelWebSocketServerStats, Task> _pingHandler = async (listenerContext, stats) =>
+    {
+        listenerContext.Response.ContentType = "application/json";
+        listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
+
+        string jsonResponse = JsonSerializer.Serialize(stats);
+        await listenerContext.Response.WriteAsync(jsonResponse);
+    };
 
     public KestrelWebSocketServer(ILogger logger,
             long queueThrottleLimitBytes = long.MaxValue,
-            int keepAlivePingIntervalS = 30,
-            int incomingBufferSize = 1048576 * 5,//5mb
+            // int keepAlivePingIntervalS = 30,
+            int incomingBufferSizeBytes = 1048576 * 5,//5mb
             bool queueStringMessages = false,
-            string httpPingResponseRoute = null)
+            string httpPingResponseRoute = null,
+            Func<HttpContext, KestrelWebSocketServerStats, Task> pingHandler = null)
     {
         _behaviors = new ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>>();
         _clients = new ConcurrentDictionary<Guid, WebSocket>();
         _logger = logger;
         _queueThrottleLimit = queueThrottleLimitBytes;
         _queueStringMessages = queueStringMessages;
-        _incomingBufferSize = incomingBufferSize;
+        _incomingBufferSizeBytes = incomingBufferSizeBytes;
         _pingResponseRoute = httpPingResponseRoute;
-        _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
+
+        _pingHandler = pingHandler ?? _pingHandler;
+        //ping needs to be handled at the message layer to be smart enough
+        // _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
     }
 
     public IList<Guid> GetActiveConnectionIds()
@@ -58,7 +71,11 @@ public class KestrelWebSocketServer : IDisposable
     {
         return (_host != null);
     }
-
+    public KestrelWebSocketServerStats GetStats()
+    {
+        var stats = new KestrelWebSocketServerStats(_messageQueue?.GetQueueStats(), _connectedClientCount);
+        return stats;
+    }
     public Task AbortConnectionAsync(Guid connectionid, CancellationToken tok = default(CancellationToken))
     {
         WebSocket ws = null;
@@ -144,6 +161,17 @@ public class KestrelWebSocketServer : IDisposable
                 {
                     await handleClient(context, builder, _cancellationTokenSource.Token);
                 }
+
+                if (context.Request.Path.HasValue
+                   && !string.IsNullOrEmpty(_pingResponseRoute)
+                   && context.Request.Path.Value.Contains(_pingResponseRoute)
+                   && !context.WebSockets.IsWebSocketRequest)
+                {
+                    var stats = GetStats();
+                    await _pingHandler(context, stats);
+                    //    await listenerContext.Response..CompleteAsync();//.Close();
+                    return;
+                }
             });
         });
         _host = hostBuilder.Build();
@@ -195,16 +223,7 @@ public class KestrelWebSocketServer : IDisposable
 
         try
         {
-            if (listenerContext.Request.Path.HasValue
-                && !string.IsNullOrEmpty(_pingResponseRoute)
-                && listenerContext.Request.Path.Value.Contains(_pingResponseRoute)
-                && !listenerContext.WebSockets.IsWebSocketRequest)
-            {
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
-                await listenerContext.Response.WriteAsync("ok");
-                //    await listenerContext.Response..CompleteAsync();//.Close();
-                return;
-            }
+
 
 
             int statusCode = 500;
@@ -264,7 +283,7 @@ public class KestrelWebSocketServer : IDisposable
         {
             using (webSocket)
             {
-                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, (i) => _logger.LogInformation(i), _queueStringMessages, _incomingBufferSize, token);
+                await webSocket.ProcessIncomingMessages(_messageQueue, connectionId, stringBehavior, binaryBehavior, closeBehavior, (i) => _logger.LogInformation(i), _queueStringMessages, _incomingBufferSizeBytes, token);
                 _logger.LogInformation($"KestrelWebSocketServer: ProcessIncomingMessages completed for {connectionId}");
             }
         }

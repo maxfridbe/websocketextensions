@@ -26,20 +26,33 @@ namespace WebSocketExtensions
         private readonly long _queueThrottleLimit;
         private readonly TimeSpan _keepAlivePingInterval;
         private bool _enablePingResponse = false;
+        private readonly string pingURIPath;
+        private Action<HttpListenerContext> _pingHandler = (listenerContext) =>
+        {
+            listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
+
+        };
         private bool _isDisposing = false;
 
         public HttpListenerWebSocketServer(Action<string, bool> logger = null,
             long queueThrottleLimitBytes = long.MaxValue,
             int keepAlivePingIntervalS = 30,
             int incomingBufferSize = 1024 * 1024 * 5,
-            bool enablePingResponse = false) : base(logger)
+            bool enablePingResponse = false,
+            string pingURIPath = "/ping_ms",
+            Action<HttpListenerContext> pingHandler = null
+            ) : base(logger)
+
         {
-            _incomingBufferSize=incomingBufferSize;
+            _incomingBufferSize = incomingBufferSize;
             _behaviors = new ConcurrentDictionary<string, Func<HttpListenerWebSocketServerBehavior>>();
             _clients = new ConcurrentDictionary<Guid, WebSocket>();
             _queueThrottleLimit = queueThrottleLimitBytes;
             _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
             _enablePingResponse = enablePingResponse;
+            this.pingURIPath = pingURIPath;
+
+            this._pingHandler = pingHandler ?? _pingHandler;
         }
 
         public IList<Guid> GetActiveConnectionIds()
@@ -86,7 +99,7 @@ namespace WebSocketExtensions
                 throw new Exception($"connectionId {connectionId} is no longer a client");
             }
 
-            return ws.SendStreamAsync(stream, sendBuffer,dispose,  tok);
+            return ws.SendStreamAsync(stream, sendBuffer, dispose, tok);
         }
 
         public Task SendBytesAsync(Guid connectionId, byte[] data, CancellationToken tok = default(CancellationToken))
@@ -200,11 +213,11 @@ namespace WebSocketExtensions
                     Func<HttpListenerWebSocketServerBehavior> builder = null;
                     if (!_behaviors.TryGetValue(listenerContext.Request.RawUrl, out builder))
                     {
-                        if (_enablePingResponse && listenerContext.Request.RawUrl.Contains("/ping_ms"))
+                        if (_enablePingResponse && listenerContext.Request.RawUrl.Contains(pingURIPath))
                         {
-                            listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
-
+                            _pingHandler(listenerContext);
                             listenerContext.Response.Close();
+                            return;
                         }
 
                         _logError($"There is no behavior defined for {listenerContext.Request.RawUrl}");

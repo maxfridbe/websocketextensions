@@ -4,6 +4,7 @@ using System.Threading;
 
 namespace WebSocketExtensions
 {
+public record class PagingMessageQueueStats(int Count, long QueueBinarySizeBytes);
     public class PagingMessageQueue
     {
         private BlockingCollection<WebSocketMessage> _messageQueue;
@@ -48,7 +49,14 @@ namespace WebSocketExtensions
 
             t.Start();
         }
-
+        public PagingMessageQueueStats GetQueueStats()
+        {
+            if (_messageQueue != null)
+            {
+                return new PagingMessageQueueStats(_messageQueue.Count, _queueBinarySizeBytes);
+            }
+            return  new PagingMessageQueueStats(0, _queueBinarySizeBytes);;
+        }
         public void Push(WebSocketMessage msg)
         {
             if (msg.IsBinary)
@@ -72,7 +80,8 @@ namespace WebSocketExtensions
             {
                 _messageQueue.CompleteAdding();
             }
-            catch {
+            catch
+            {
             }
         }
     }

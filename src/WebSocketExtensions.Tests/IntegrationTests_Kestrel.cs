@@ -350,7 +350,7 @@ namespace WebSocketExtensions.Tests
         {
             //arrange
             var logger = _loggerFac();
-            using var server = new  KestrelWebSocketServer(logger);  
+            using var server = new KestrelWebSocketServer(logger);
             var port = _FreeTcpPort();
 
             var tcs = new TaskCompletionSource();
@@ -374,11 +374,13 @@ namespace WebSocketExtensions.Tests
             string res = null;
             using var client = new WebSocketClient()
             {
-                MessageHandler = (e) => {
+                MessageHandler = (e) =>
+                {
                     _output.WriteLine($"REC:{e.Data}");
                     e.WebSocket.SendStringAsync("ACK").GetAwaiter().GetResult();
                 },
-                BinaryHandler = async (e) => {
+                BinaryHandler = async (e) =>
+                {
                     _output.WriteLine("REC Inf");
 
                     await sem.WaitAsync();//without limiting number of processing threads bad things
@@ -386,7 +388,7 @@ namespace WebSocketExtensions.Tests
                     Task.Run(() =>
                     {
                         Thread.Sleep(TimeSpan.FromDays(1));
-                       sem.Release();
+                        sem.Release();
                     });
 
                 }
@@ -408,7 +410,7 @@ namespace WebSocketExtensions.Tests
                 while (!tcs.Task.IsCompleted)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(10));
-                    server.SendStringAsync(cid, "PING");
+                    await server.SendStringAsync(cid, "PING");
 
                 }
             });
@@ -1119,12 +1121,12 @@ namespace WebSocketExtensions.Tests
                 //Verify that new client still works again
                 await newClient.SendStringAsync("hi", CancellationToken.None);
 
-var count = 0;
+                var count = 0;
                 while (kickoffRes == null)
                 {
-                    if(count>400)
-                    await Task.Delay(100);
-                    count ++;
+                    if (count > 400)
+                        await Task.Delay(100);
+                    count++;
                 }
                 Assert.Equal("dontlikeu", kickoffRes);
                 Assert.Equal("hihi", res);
@@ -1237,7 +1239,7 @@ var count = 0;
             var bytes = File.ReadAllBytes(s);
 
             long frank = 100 * 1000 * 1000;
-            var server = new KestrelWebSocketServer(logger, frank);// 
+            var server = new KestrelWebSocketServer(logger, queueThrottleLimitBytes:frank,httpPingResponseRoute:"/bob");// 
             var port = _FreeTcpPort();
             var comp = new TaskCompletionSource();
 
@@ -1249,7 +1251,7 @@ var count = 0;
             { //handler introduces delay
                 Thread.Sleep(100);
                 msgCount++;
-                if(msgCount == 400)
+                if (msgCount == 400)
                     comp.TrySetResult();
                 Assert.True(e.Data.Length == bytes.Length);
             };
@@ -1267,6 +1269,23 @@ var count = 0;
 
             //act
 
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+            Task.Run(async () =>
+            {
+                var log = _loggerFac();
+                HttpClient client = new HttpClient();
+                foreach (var a in Enumerable.Range(0, 10000))
+                {
+
+                    HttpResponseMessage response = await client.GetAsync($"http://localhost:{port}/bob");
+                    response.EnsureSuccessStatusCode(); // Throws an exception if not successful
+                    string responseBody = await response.Content.ReadAsStringAsync();
+                    log.LogInformation(responseBody);
+                    Thread.Sleep(1000);
+                }
+            });
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
             for (int i = 0; i < 400; i++)
             {
                 client.SendBytesAsync(bytes);
@@ -1274,7 +1293,7 @@ var count = 0;
                 client.SendBytesAsync(bytes);
                 await Task.Delay(1);
             }
-await comp.Task;
+            await comp.Task;
 
             //assert
         }
