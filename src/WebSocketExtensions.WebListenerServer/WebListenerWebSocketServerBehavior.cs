@@ -2,8 +2,9 @@
 using System;
 using System.IO;
 
-namespace WebSocketExtensions
+namespace WebSocketExtensions.WebListenerServer
 {
+
     public abstract class WebListenerWebSocketServerBehavior
     {
         public DateTime StartTime { get; } = DateTime.UtcNow;
@@ -15,4 +16,5 @@ namespace WebSocketExtensions
         public virtual void OnClose(WebSocketClosedEventArgs e) { }
         public virtual void OnError(ErrorEventArgs e) { }
     }
+
 }

@@ -6,8 +6,9 @@
     <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net, A drop in replacement for WebSocketSharp, Has implementations using HttpListener, Weblistener moved to its own obsolete package</Description>
     <Authors>Max Fridberg</Authors>
     <Company />
+    <obsolete>The package this relys on is no longer maintained</obsolete>
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <PackageTags>WebSocket System.Net WebSocketExtensions</PackageTags>
+    <PackageTags>WebSocket System.Net WebSocketExtensions WebListener legacy</PackageTags>
     <PackageProjectUrl>https://github.com/maxfridbe/websocketextensions</PackageProjectUrl>
     <PackageIconUrl>https://raw.githubusercontent.com/maxfridbe/websocketextensions/master/websocket.png</PackageIconUrl>
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
@@ -19,4 +20,10 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WebSocketExtensions\WebSocketExtensions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Net.Http.Server" Version="1.1.4" />
+  </ItemGroup>
 </Project>

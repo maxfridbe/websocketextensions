@@ -1,16 +1,18 @@
-﻿using Microsoft.Net.Http.Server;
+﻿using System.Collections.Concurrent;
+using System.Net;
+using System.Net.WebSockets;
+using Microsoft.Net.Http.Server;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
+using WebSocketExtensions;
 
-namespace WebSocketExtensions
+namespace WebSocketExtensions.WebListenerServer
 {
+
     /// <summary>
     /// Web Listener listens on WINDOWS Dotnet48
     /// Use Kestrel for dotnet6 etc
@@ -347,4 +349,5 @@ namespace WebSocketExtensions
             }
         }
     }
+
 }

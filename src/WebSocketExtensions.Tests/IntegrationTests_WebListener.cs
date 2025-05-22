@@ -11,9 +11,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Net.Http.Server;
 using Xunit;
+using WebSocketExtensions.WebListenerServer;
 using Xunit.Abstractions;
+using Microsoft.Net.Http.Server;
 
 namespace WebSocketExtensions.Tests
 {

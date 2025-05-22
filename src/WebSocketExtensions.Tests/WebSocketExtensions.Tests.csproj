@@ -1,11 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0-preview-23577-04" />
     <PackageReference Include="xunit" Version="2.6.3" />
@@ -15,11 +12,9 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\WebSocketExtensions\WebSocketExtensions.csproj" />
+    <ProjectReference Include="..\WebSocketExtensions.WebListenerServer\WebSocketExtensions.WebListenerServer.csproj" />
     <ProjectReference Include="..\WebSocketExtensions.Kestrel\WebSocketExtensions.Kestrel.csproj" />
-
   </ItemGroup>
-
 </Project>
