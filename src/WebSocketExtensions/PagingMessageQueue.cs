@@ -4,11 +4,12 @@ using System.Threading;
 
 namespace WebSocketExtensions
 {
-public record class PagingMessageQueueStats(int Count, long QueueBinarySizeBytes);
-    public class PagingMessageQueue
+    public record PagingMessageQueueStats(int Count, long QueueBinarySizeBytes);
+    public class PagingMessageQueue : IDisposable
     {
         private BlockingCollection<WebSocketMessage> _messageQueue;
         private readonly long _maxPageSize;
+        private readonly string _location;
         private readonly Action<string> _logError;
 
         private long _queueBinarySizeBytes;
@@ -16,6 +17,7 @@ public record class PagingMessageQueueStats(int Count, long QueueBinarySizeBytes
         public PagingMessageQueue(string location, Action<string> logError, long maxPageSize = long.MaxValue)
         {
             _messageQueue = new BlockingCollection<WebSocketMessage>();
+            _location = location;
             _logError = logError;
             _maxPageSize = maxPageSize;
 
@@ -55,7 +57,7 @@ public record class PagingMessageQueueStats(int Count, long QueueBinarySizeBytes
             {
                 return new PagingMessageQueueStats(_messageQueue.Count, _queueBinarySizeBytes);
             }
-            return  new PagingMessageQueueStats(0, _queueBinarySizeBytes);;
+            return new PagingMessageQueueStats(0, _queueBinarySizeBytes); ;
         }
         public void Push(WebSocketMessage msg)
         {
@@ -74,15 +76,20 @@ public record class PagingMessageQueueStats(int Count, long QueueBinarySizeBytes
             _messageQueue.Add(msg);
         }
 
-        public void CompleteAdding()
+
+
+        public void Dispose()
         {
             try
             {
-                _messageQueue.CompleteAdding();
+                _messageQueue?.CompleteAdding();
             }
-            catch
+            catch (Exception e)
             {
+                _logError($"{_location}: Error in processing Queue Dispose, {e.ToString()}");
             }
+            //handled by thread cleanup
+            // _messageQueue.Dispose();
         }
     }
 }

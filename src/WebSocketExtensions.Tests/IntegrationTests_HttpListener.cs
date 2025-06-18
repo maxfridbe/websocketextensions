@@ -291,7 +291,7 @@ namespace WebSocketExtensions.Tests
                     connectedTCS.TrySetResult(true);
                 }
             };
-            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            beh.StringMessageHandler = (e) => { _ = e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
             var u = $"://localhost:{port}/";
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
@@ -390,7 +390,7 @@ namespace WebSocketExtensions.Tests
                 }
 
             };
-            beh.StringMessageHandler = (e) => { e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
+            beh.StringMessageHandler = (e) => { _ = e.WebSocket.SendStringAsync(e.Data + e.Data, CancellationToken.None); };
             var u = $"://localhost:{port}/";
             server.AddRouteBehavior("/aaa", () => beh);
             await server.StartAsync("http" + u);
@@ -703,7 +703,7 @@ namespace WebSocketExtensions.Tests
 
             //act
             var s = _getFile("tst", 20);
-            await client.SendStreamAsync(File.OpenRead(s),new byte[1000*1000]);
+            await client.SendStreamAsync(File.OpenRead(s));
             await Task.Delay(100);
 
             //assert
@@ -859,7 +859,7 @@ namespace WebSocketExtensions.Tests
             {
 
                 var s = _getFile("tst2", 10);
-                await client.SendStreamAsync(File.OpenRead(s), new byte[1000*1000]);
+                await client.SendStreamAsync(File.OpenRead(s));
                 await Task.Delay(1);
                 //Assert.Equal(new FileInfo(s).Length, recievedSize);
             }

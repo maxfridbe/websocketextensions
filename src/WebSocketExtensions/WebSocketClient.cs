@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.WebSockets;
 using System.Threading;
@@ -60,7 +61,7 @@ namespace WebSocketExtensions
 
             _incomingMessagesTask = Task.Factory.StartNew(async () =>
             {
-                await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo,false, _incomingBufferSize, _cancellationTokenSource.Token);
+                await _client.ProcessIncomingMessages(_messageQueue, _clientId, messageBehavior, binaryBehavior, _closeBehavior, _logInfo, false, _incomingBufferSize, _cancellationTokenSource.Token);
                 _logError("WebSocketClient: Completed ProcessIncomingMessages");
             });
         }
@@ -90,16 +91,10 @@ namespace WebSocketExtensions
             return _client.SendBytesAsync(data, tok);
 
         }
-        public Task SendStreamAsync(Stream data, byte[] streamSendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Stream data, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
-            if (streamSendBuffer == null)
-            {
-                if (_streamSendBuffer == null)
-                    _streamSendBuffer = new byte[_streamSendBufferLen];
+            return _client.SendStreamAsync(data, dispose, tok);
 
-                streamSendBuffer = _streamSendBuffer;
-            }
-            return _client.SendStreamAsync(data, streamSendBuffer, dispose, tok);
         }
 
         public void Dispose()
@@ -132,7 +127,7 @@ namespace WebSocketExtensions
             if (_incomingMessagesTask != null)
             {
                 _incomingMessagesTask.GetAwaiter().GetResult();
-                _messageQueue.CompleteAdding();
+                _messageQueue.Dispose();
             }
 
             _client.Dispose();

@@ -90,11 +90,11 @@ namespace WebSocketExtensions.WebListenerServer
 
             throw new Exception($"WebListenerWebSocketServer: connectionId {connectionid} is no longer a client");
         }
-        public Task SendStreamAsync(Guid connectionid, Stream stream, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+        public Task SendStreamAsync(Guid connectionid, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
         {
             WebSocket ws = _getWsFromConnectionId(connectionid);
 
-            return ws.SendStreamAsync(stream, sendBuffer, dispose, tok);
+            return ws.SendStreamAsync(stream, dispose, tok);
         }
 
         public Task SendBytesAsync(Guid connectionid, byte[] data, CancellationToken tok = default(CancellationToken))
@@ -345,7 +345,7 @@ namespace WebSocketExtensions.WebListenerServer
             {
                 _isDisposing = true;
                 stopListeningThread();
-                _messageQueue?.CompleteAdding();
+                _messageQueue?.Dispose();
             }
         }
     }

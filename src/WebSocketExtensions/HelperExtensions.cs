@@ -12,16 +12,16 @@ namespace WebSocketExtensions
     {
         private static ResourceLocker _locker = new ResourceLocker();
 
-        public static Task GetContextAsync(this HttpListener listener)
-        {
-            return Task.Factory.FromAsync<HttpListenerContext>(listener.BeginGetContext, listener.EndGetContext, TaskCreationOptions.None);
-        }
+        // public static Task GetContextAsync(this HttpListener listener)
+        // {
+        //     return Task.Factory.FromAsync<HttpListenerContext>(listener.BeginGetContext, listener.EndGetContext, TaskCreationOptions.None);
+        // }
 
         public static void CleanupSendMutex(this WebSocket ws)
         {
             _locker.RemoveLock(ws);
         }
-        public static async Task SendStreamAsync(this WebSocket ws, Stream stream, byte[] sendBuffer,bool dispose = false,  CancellationToken tok = default(CancellationToken))
+        public static async Task SendStreamAsync(this WebSocket ws, Stream stream, bool dispose = false, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
                 throw new Exception("SendStreamAsync:Websocket is null");
@@ -31,22 +31,26 @@ namespace WebSocketExtensions
                 throw new Exception("SendStreamAsync: Websocket not open.");
             }
 
-          
             try
             {
+
                 await _locker.EnterLockAsync(ws, tok);
+                byte[] sendBuffer = null;
+
                 try
                 {
+                    sendBuffer = BufferManager.GetBuffer();
+
                     var buffSize = sendBuffer.Length;
-                   // var buffSize = 1024 * 1024;
+                    // var buffSize = 1024 * 1024;
                     //var len = stream.Length;
                     //var chunksize = len > buffSize ? buffSize : len;
                     var remaining = stream.Length;
                     //byte[] buffer = new byte[buffSize];
                     while (remaining > 0)
                     {
-                        long readLen = Math.Min(remaining, buffSize); 
-                        
+                        long readLen = Math.Min(remaining, buffSize);
+
                         var read = stream.Read(sendBuffer, 0, (int)readLen);
                         remaining -= read;
 
@@ -55,15 +59,13 @@ namespace WebSocketExtensions
                         await _send(ws, data, WebSocketMessageType.Binary, isLast, tok);
                     }
                 }
-                catch (Exception e)
-                {
-                    Console.Write(e.ToString());
-                    throw;
-                }
                 finally
                 {
                     if (dispose)
                         stream.Dispose();
+                    BufferManager.ReturnBuffer(sendBuffer);
+
+
                 }
             }
             finally
@@ -82,7 +84,7 @@ namespace WebSocketExtensions
                 throw new Exception("SendCloseAsync: Websocket not open.");
             }
 
-            await _locker.EnterLockAsync(ws,tok);
+            await _locker.EnterLockAsync(ws, tok);
 
             try
             {
@@ -94,11 +96,11 @@ namespace WebSocketExtensions
             }
         }
 
-        public static async Task CloseOutputNormalAsync(this WebSocket ws,  string msg, CancellationToken tok = default(CancellationToken))
+        public static async Task CloseOutputNormalAsync(this WebSocket ws, string msg, CancellationToken tok = default(CancellationToken))
         {
             if (ws == null)
                 throw new Exception("CloseOutputAsync: Websocket is null");
-            
+
 
             await _locker.EnterLockAsync(ws, tok);
 
@@ -130,7 +132,7 @@ namespace WebSocketExtensions
             }
             finally
             {
-               _locker.ExitLock(ws);
+                _locker.ExitLock(ws);
             }
 
         }

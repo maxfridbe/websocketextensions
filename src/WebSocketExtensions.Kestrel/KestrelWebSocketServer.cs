@@ -15,7 +15,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-public record class KestrelWebSocketServerStats(PagingMessageQueueStats? QueueStats, int ClientCount);
+public record class KestrelWebSocketServerStats(PagingMessageQueueStats QueueStats, int ClientCount);
 
 public class KestrelWebSocketServer : IDisposable
 {
@@ -73,7 +73,7 @@ public class KestrelWebSocketServer : IDisposable
     }
     public KestrelWebSocketServerStats GetStats()
     {
-        var stats = new KestrelWebSocketServerStats(_messageQueue?.GetQueueStats(), _connectedClientCount);
+        var stats = new KestrelWebSocketServerStats(_messageQueue?.GetQueueStats() ?? new PagingMessageQueueStats(0, 0), _connectedClientCount);
         return stats;
     }
     public Task AbortConnectionAsync(Guid connectionid, CancellationToken tok = default(CancellationToken))
@@ -107,11 +107,12 @@ public class KestrelWebSocketServer : IDisposable
         throw new Exception($"KestrelWebSocketServer: connectionId {connectionId} is no longer a client");
 
     }
-    public Task SendStreamAsync(Guid connectionId, Stream stream, byte[] sendBuffer = null, bool dispose = true, CancellationToken tok = default(CancellationToken))
+    public Task SendStreamAsync(Guid connectionId, Stream stream, bool dispose = true, CancellationToken tok = default(CancellationToken))
     {
         WebSocket ws = _getWebSocketFromConnectionId(connectionId);
 
-        return ws.SendStreamAsync(stream, sendBuffer, dispose, tok);
+
+        return ws.SendStreamAsync(stream, dispose, tok);
     }
 
     public Task SendBytesAsync(Guid connectionId, byte[] data, CancellationToken tok = default(CancellationToken))
@@ -182,10 +183,11 @@ public class KestrelWebSocketServer : IDisposable
 
         return startedHostTask;
     }
+    // src/WebSocketExtensions.Kestrel/KestrelWebSocketServer.cs
 
     public Action<T> MakeSafe<T>(Action<T> torun, string handlerName)
     {
-        return new Action<T>((T data) =>
+        return (T data) =>
         {
             try
             {
@@ -195,12 +197,12 @@ public class KestrelWebSocketServer : IDisposable
             {
                 _logger.LogError($"KestrelWebSocketServer: Error in handler '{handlerName}': \r\n {e} \r\n {e.StackTrace}");
             }
-        });
+        };
     }
 
     public Action<T, T2> MakeSafe<T, T2>(Action<T, T2> torun, string handlerName)
     {
-        return new Action<T, T2>((T data, T2 data2) =>
+        return (T data, T2 data2) =>
          {
              try
              {
@@ -210,7 +212,7 @@ public class KestrelWebSocketServer : IDisposable
              {
                  _logger.LogError($"KestrelWebSocketServer: Error in handler {handlerName} {e}");
              }
-         });
+         };
     }
 
     private async Task handleClient<TWebSocketBehavior>(HttpContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
@@ -333,7 +335,7 @@ public class KestrelWebSocketServer : IDisposable
         {
             _isDisposing = true;
             stopListeningThread();
-            _messageQueue?.CompleteAdding();
+            _messageQueue?.Dispose();//will allow message queue to complete processing 
         }
     }
 }
