@@ -3,12 +3,16 @@ name: .NET Build and Pack
 on:
   push:
     branches: [ master, main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ master, main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -31,3 +35,12 @@ jobs:
         path: |
           **/*.nupkg
           **/*.snupkg
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          **/*.nupkg
+          **/*.snupkg
+        generate_release_notes: true
