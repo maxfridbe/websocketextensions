@@ -1,0 +1,33 @@
+name: .NET Build and Pack
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore src/WebSocketExtensions.sln
+
+    - name: Build and Pack
+      run: dotnet build src/WebSocketExtensions.sln --configuration Release --no-restore
+
+    - name: Upload NuGet Packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: |
+          **/*.nupkg
+          **/*.snupkg

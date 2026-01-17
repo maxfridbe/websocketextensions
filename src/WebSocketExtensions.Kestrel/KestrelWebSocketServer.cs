@@ -7,12 +7,15 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.Logging;
 
 public record class KestrelWebSocketServerStats(PagingMessageQueueStats QueueStats, int ClientCount);
@@ -32,6 +35,8 @@ public class KestrelWebSocketServer : IDisposable
     // private readonly TimeSpan _keepAlivePingInterval;
     private bool _isDisposing = false;
     private IWebHost _host = null;
+    private Action<KestrelServerOptions> _configureKestrel;
+    private X509Certificate2 _certificate;
     private Func<HttpContext, KestrelWebSocketServerStats, Task> _pingHandler = async (listenerContext, stats) =>
     {
         listenerContext.Response.ContentType = "application/json";
@@ -47,7 +52,31 @@ public class KestrelWebSocketServer : IDisposable
             int incomingBufferSizeBytes = 1048576 * 5,//5mb
             bool queueStringMessages = false,
             string httpPingResponseRoute = null,
+            Func<HttpContext, KestrelWebSocketServerStats, Task> pingHandler = null,
+            Action<KestrelServerOptions> configureKestrel = null)
+        : this(logger, queueThrottleLimitBytes, incomingBufferSizeBytes, queueStringMessages, httpPingResponseRoute, pingHandler)
+    {
+        _configureKestrel = configureKestrel;
+    }
+
+    public KestrelWebSocketServer(ILogger logger,
+            X509Certificate2 certificate,
+            long queueThrottleLimitBytes = long.MaxValue,
+            int incomingBufferSizeBytes = 1048576 * 5,//5mb
+            bool queueStringMessages = false,
+            string httpPingResponseRoute = null,
             Func<HttpContext, KestrelWebSocketServerStats, Task> pingHandler = null)
+        : this(logger, queueThrottleLimitBytes, incomingBufferSizeBytes, queueStringMessages, httpPingResponseRoute, pingHandler)
+    {
+        _certificate = certificate;
+    }
+
+    private KestrelWebSocketServer(ILogger logger,
+            long queueThrottleLimitBytes,
+            int incomingBufferSizeBytes,
+            bool queueStringMessages,
+            string httpPingResponseRoute,
+            Func<HttpContext, KestrelWebSocketServerStats, Task> pingHandler)
     {
         _behaviors = new ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>>();
         _clients = new ConcurrentDictionary<Guid, WebSocket>();
@@ -58,8 +87,6 @@ public class KestrelWebSocketServer : IDisposable
         _pingResponseRoute = httpPingResponseRoute;
 
         _pingHandler = pingHandler ?? _pingHandler;
-        //ping needs to be handled at the message layer to be smart enough
-        // _keepAlivePingInterval = TimeSpan.FromSeconds(keepAlivePingIntervalS);
     }
 
     public IList<Guid> GetActiveConnectionIds()
@@ -145,11 +172,20 @@ public class KestrelWebSocketServer : IDisposable
         _cancellationTokenSource = new CancellationTokenSource();
 
         var hostBuilder = new WebHostBuilder()
-            .UseKestrel()
+            .UseKestrel(options =>
+            {
+                if (_certificate != null)
+                {
+                    options.ConfigureHttpsDefaults(httpsOptions =>
+                    {
+                        httpsOptions.ServerCertificate = _certificate;
+                    });
+                }
+                _configureKestrel?.Invoke(options);
+            })
             .UseUrls(listenerPrefix);
         hostBuilder.Configure(app =>
         {
-
             app.UseWebSockets(new WebSocketOptions
             {
                 KeepAliveInterval = TimeSpan.FromSeconds(10)
@@ -177,6 +213,24 @@ public class KestrelWebSocketServer : IDisposable
         });
         _host = hostBuilder.Build();
         var startedHostTask = _host.StartAsync();
+
+        if (_certificate != null)
+        {
+            try
+            {
+                var uri = new Uri(listenerPrefix.Replace("+", "localhost").Replace("*", "localhost"));
+                var host = uri.Host;
+                var certName = _certificate.GetNameInfo(X509NameType.DnsName, false) ?? _certificate.GetNameInfo(X509NameType.SimpleName, false);
+                if (!string.Equals(host, certName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogError($"KestrelWebSocketServer: Certificate CN '{certName}' does not match listener host '{host}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogTrace($"KestrelWebSocketServer: Could not verify certificate CN: {ex.Message}");
+            }
+        }
 
         _logger.LogInformation($"KestrelWebSocketServer: Listener Started on {listenerPrefix}.");
         _messageQueue = new PagingMessageQueue("WebSocketServer", (e) => _logger.LogError(e), _queueThrottleLimit);
