@@ -1,6 +1,18 @@
 # WebSocketExtensions DotNetCore
 Defines WebSocket extensions to microsoft WebSocket implementation to bring it in line with something like WebSocketSharp
 
+## Installation
+
+### Core (Client & HttpListener)
+```bash
+dotnet add package WebSocketExtensions
+```
+
+### Kestrel Server Support
+```bash
+dotnet add package WebSocketExtensions.Kestrel
+```
+
 ## This package attempts to be like WebSocketSharp for DotNetCore
 - It is continuously a work in progress
 - It is used in heavy-use production
