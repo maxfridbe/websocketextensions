@@ -44,3 +44,7 @@ jobs:
           **/*.nupkg
           **/*.snupkg
         generate_release_notes: true
+
+    - name: Publish to NuGet
+      if: startsWith(github.ref, 'refs/tags/')
+      run: dotnet nuget push "**/*.nupkg" --api-key ${{ secrets.nuget || vars.nuget }} --source https://api.nuget.org/v3/index.json --skip-duplicate
