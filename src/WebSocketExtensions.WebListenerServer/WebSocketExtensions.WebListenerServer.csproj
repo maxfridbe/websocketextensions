@@ -3,7 +3,7 @@
     <TargetFrameworks Condition=" '$(OS)' != 'Windows_NT' ">netstandard2.0;net8.0</TargetFrameworks>
     <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">netstandard2.0;net472;net48;net8.0</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Description>A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net, A drop in replacement for WebSocketSharp, Has implementations using HttpListener, Weblistener moved to its own obsolete package</Description>
+    <Description>DEPRECATED: Use KestrelWebSocketServer. A WebSocketClient and WebSocketServer wrapper for WebSocket Api In System.Net, A drop in replacement for WebSocketSharp, Has implementations using HttpListener, Weblistener moved to its own obsolete package</Description>
     <Authors>Max Fridberg</Authors>
     <Company />
     <obsolete>The package this relys on is no longer maintained</obsolete>
@@ -13,10 +13,10 @@
     <PackageIconUrl>https://raw.githubusercontent.com/maxfridbe/websocketextensions/master/websocket.png</PackageIconUrl>
     <RepositoryUrl>https://github.com/maxfridbe/websocketextensions</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>Feel free to contribute, Integration Tests Work but no other gaurentees.</PackageReleaseNotes>
-    <Version>2.13.0.0</Version>
-    <AssemblyVersion>2.13.0.0</AssemblyVersion>
-    <FileVersion>2.13.0.0</FileVersion>
+    <PackageReleaseNotes>DEPRECATED: Use KestrelWebSocketServer. This package is no longer maintained.</PackageReleaseNotes>
+    <Version>2.13.1.0</Version>
+    <AssemblyVersion>2.13.1.0</AssemblyVersion>
+    <FileVersion>2.13.1.0</FileVersion>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>

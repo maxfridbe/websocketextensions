@@ -211,6 +211,65 @@ namespace WebSocketExtensions.Tests
 
         }
 
+        [Fact]
+        public async Task TestGetWebsocketsByPath()
+        {
+            //arrange
+            var logger = _loggerFac();
+            using var server = new KestrelWebSocketServer(logger);
+            var port = _FreeTcpPort();
+
+            server.AddRouteBehavior("/aaa", () => new testBeh());
+            server.AddRouteBehavior("/bbb", () => new testBeh());
+            await server.StartAsync($"http://localhost:{port}/");
+
+            using var client1 = new WebSocketClient();
+            await client1.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            using var client2 = new WebSocketClient();
+            await client2.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            using var client3 = new WebSocketClient();
+            await client3.ConnectAsync($"ws://localhost:{port}/bbb");
+
+            //act
+            var aaaSockets = server.GetWebsocketsByPath("/aaa");
+            var bbbSockets = server.GetWebsocketsByPath("/bbb");
+            var cccSockets = server.GetWebsocketsByPath("/ccc");
+
+            //assert
+            Assert.Equal(2, aaaSockets.Count);
+            Assert.Equal(1, bbbSockets.Count);
+            Assert.Empty(cccSockets);
+        }
+
+        [Fact]
+        public async Task TestGetWebsocketsByPath_AfterDisconnect()
+        {
+            //arrange
+            var logger = _loggerFac();
+            using var server = new KestrelWebSocketServer(logger);
+            var port = _FreeTcpPort();
+
+            server.AddRouteBehavior("/aaa", () => new testBeh());
+            await server.StartAsync($"http://localhost:{port}/");
+
+            using var client1 = new WebSocketClient();
+            await client1.ConnectAsync($"ws://localhost:{port}/aaa");
+
+            using (var client2 = new WebSocketClient())
+            {
+                await client2.ConnectAsync($"ws://localhost:{port}/aaa");
+                Assert.Equal(2, server.GetWebsocketsByPath("/aaa").Count);
+            }
+
+            //act
+            await Task.Delay(200); // Wait for server to process disconnect
+            var aaaSockets = server.GetWebsocketsByPath("/aaa");
+
+            //assert
+            Assert.Single(aaaSockets);
+        }
 
         [Fact]
         public async Task TestCreateServer_connect_ping()

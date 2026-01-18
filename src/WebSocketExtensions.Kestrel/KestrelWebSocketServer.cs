@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -23,6 +24,8 @@ public record class KestrelWebSocketServerStats(PagingMessageQueueStats QueueSta
 public class KestrelWebSocketServer : IDisposable
 {
     private ConcurrentDictionary<Guid, WebSocket> _clients;
+    private Dictionary<string, List<Guid>> path_to_clients_map;
+
     private ConcurrentDictionary<string, Func<KestrelWebSocketServerBehavior>> _behaviors;
     private PagingMessageQueue _messageQueue = null;
     private CancellationTokenSource _cancellationTokenSource = null;
@@ -92,6 +95,25 @@ public class KestrelWebSocketServer : IDisposable
     public IList<Guid> GetActiveConnectionIds()
     {
         return _clients.Where(c => c.Value.State == WebSocketState.Open).Select(c => c.Key).ToList();
+    }
+    public List<WebSocket> GetWebsocketsByPath(string path)
+    {
+        if (!path_to_clients_map.TryGetValue(path, out List<Guid> sockets))
+            return new List<WebSocket>();
+
+
+        var websocks = sockets.Select(s =>
+        {
+            WebSocket ws = null;
+            if (_clients.TryGetValue(s, out ws) 
+                && ws.State == WebSocketState.Open)
+                return ws;
+            return null;
+        })
+        .Where(s => s != null)
+        .ToList();
+        
+        return websocks;
     }
 
     public bool IsListening()
@@ -167,6 +189,9 @@ public class KestrelWebSocketServer : IDisposable
     {
         stopListeningThread();
 
+        path_to_clients_map = new Dictionary<string, List<Guid>>();
+
+
         var listenerThredStarted = new TaskCompletionSource<bool>();
 
         _cancellationTokenSource = new CancellationTokenSource();
@@ -196,7 +221,17 @@ public class KestrelWebSocketServer : IDisposable
                 Func<KestrelWebSocketServerBehavior> builder = null;
                 if (_behaviors.TryGetValue(context.Request.Path, out builder))
                 {
-                    await handleClient(context, builder, _cancellationTokenSource.Token);
+                    List<Guid> sockets = null;
+                    if (!path_to_clients_map.ContainsKey(context.Request.Path))
+                    {
+                        sockets = new List<Guid>();
+                        path_to_clients_map.Add(context.Request.Path, sockets);
+                    }
+                    else
+                    {
+                        sockets = path_to_clients_map[context.Request.Path];
+                    }
+                    await handleClient(context, builder, sockets, _cancellationTokenSource.Token);
                 }
 
                 if (context.Request.Path.HasValue
@@ -268,8 +303,13 @@ public class KestrelWebSocketServer : IDisposable
              }
          };
     }
+    object socketsLock = new object();
 
-    private async Task handleClient<TWebSocketBehavior>(HttpContext listenerContext, Func<TWebSocketBehavior> behaviorBuilder, CancellationToken token)
+    private async Task handleClient<TWebSocketBehavior>(
+        HttpContext listenerContext,
+        Func<TWebSocketBehavior> behaviorBuilder,
+        List<Guid> sockets,
+        CancellationToken token)
         where TWebSocketBehavior : KestrelWebSocketServerBehavior
     {
         Guid connectionId;
@@ -314,6 +354,11 @@ public class KestrelWebSocketServer : IDisposable
 
             var safeconnected = MakeSafe<Guid, HttpContext>(behavior.OnConnectionEstablished, "behavior.OnClientConnected");
             safeconnected(connectionId, listenerContext);
+            lock (socketsLock)
+            {
+                sockets.Add(connectionId);
+            }
+
         }
         catch (Exception e)
         {
@@ -350,6 +395,10 @@ public class KestrelWebSocketServer : IDisposable
 
             webSocket?.CleanupSendMutex();
             listenerContext.Abort();
+            lock (socketsLock)
+            {
+                sockets.Remove(connectionId);
+            }
 
             bool clientRemoved = _clients.TryRemove(connectionId, out webSocket);
             if (clientRemoved)
